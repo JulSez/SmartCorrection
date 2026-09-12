@@ -1,0 +1,13 @@
+{
+  "note_individuelle": {
+    "max": 15
+  },
+  "note_groupe": {
+    "max": 5,
+    "mode": "moyenne_camarades"
+  },
+  "note_finale": {
+    "max": 20,
+    "arrondi": 0.5
+  }
+}
