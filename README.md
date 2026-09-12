@@ -40,7 +40,7 @@ python -m moteur run examples/tmex_demo/pipeline.json --db db/demo.sqlite --outp
 ```sh
 python -m moteur import-evaluation evaluation.json --db db/classe.sqlite --check-pdfs
 python -m moteur validate-grid --db db/classe.sqlite --grille 1
-python -m moteur prepare-ai --db db/classe.sqlite --copie 1 --classe-md classes/TMex.md --savoir-faire savoir-faire/equations.md > contexte.json
+python -m moteur prepare-ai --db db/classe.sqlite --copie 1 --classe-md classes/TMEX.md --savoir-faire savoir-faire/equations.md > contexte.json
 ```
 
 4. Fournir à l'IA le contexte **et le PDF de la copie**. Lui demander le
