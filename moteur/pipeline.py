@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .db import DEFAULT_DB, init_db
 from .import_correction import import_correction_json
+from .import_evaluation import import_evaluation_json
 from .notes import config_from_mapping, compute_final_note, compute_group_score
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -41,6 +42,12 @@ def cmd_import_correction(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_import_evaluation(args: argparse.Namespace) -> int:
+    sujet_id = import_evaluation_json(args.file, args.db)
+    print(f"Évaluation importée : sujet_id={sujet_id}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="smartcorrection")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -59,6 +66,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_import.add_argument("file", help="Chemin du fichier JSON de correction")
     p_import.add_argument("--db", default=str(DEFAULT_DB))
     p_import.set_defaults(func=cmd_import_correction)
+
+    p_eval = sub.add_parser("import-evaluation", help="Importer sujet, versions, corrigés et grille")
+    p_eval.add_argument("file", help="Chemin du fichier JSON d'évaluation")
+    p_eval.add_argument("--db", default=str(DEFAULT_DB))
+    p_eval.set_defaults(func=cmd_import_evaluation)
 
     return parser
 
