@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from .db import DEFAULT_DB, init_db
+from .import_correction import import_correction_json
 from .notes import config_from_mapping, compute_final_note, compute_group_score
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,6 +35,12 @@ def cmd_note(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_import_correction(args: argparse.Namespace) -> int:
+    correction_id = import_correction_json(args.file, args.db)
+    print(f"Correction importée : id={correction_id}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="smartcorrection")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -47,6 +54,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_note.add_argument("--individual", type=float, required=True)
     p_note.add_argument("--peer", type=float, nargs="*", default=[])
     p_note.set_defaults(func=cmd_note)
+
+    p_import = sub.add_parser("import-correction", help="Importer une correction JSON dans SQLite")
+    p_import.add_argument("file", help="Chemin du fichier JSON de correction")
+    p_import.add_argument("--db", default=str(DEFAULT_DB))
+    p_import.set_defaults(func=cmd_import_correction)
 
     return parser
 
