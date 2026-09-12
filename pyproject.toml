@@ -1,0 +1,12 @@
+[project]
+name = "smartcorrection"
+version = "0.1.0"
+description = "Moteur local de correction, notation et rendu pour évaluations"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+smartcorrection = "moteur.pipeline:main"
+
+[tool.setuptools]
+packages = ["moteur"]
