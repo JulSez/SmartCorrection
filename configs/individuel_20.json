@@ -1,0 +1,23 @@
+{
+  "note_individuelle": {
+    "max": 20,
+    "arrondi": null
+  },
+  "note_groupe": {
+    "max": 0,
+    "mode": "aucun",
+    "arrondi": null,
+    "sans_camarades": "zero"
+  },
+  "note_finale": {
+    "max": 20,
+    "arrondi": 0.5,
+    "arrondi_mode": "demi_superieur",
+    "poids_individuel": 1,
+    "poids_groupe": 0,
+    "bonus": 0
+  },
+  "absences": {
+    "mode": "exclure"
+  }
+}
