@@ -1,0 +1,28 @@
+{
+  "items": [
+    {
+      "item_code": "E1Q1I1",
+      "points_obtenus": 10,
+      "statut": "acquis",
+      "annotation": null,
+      "commentaire": null
+    },
+    {
+      "item_code": "E1Q2I1",
+      "points_obtenus": 10,
+      "statut": "acquis",
+      "annotation": null,
+      "commentaire": null
+    },
+    {
+      "item_code": "E1Q3I1",
+      "points_obtenus": 10,
+      "statut": "acquis",
+      "annotation": null,
+      "commentaire": null
+    }
+  ],
+  "commentaire_global": "Correction fictive destinée au test logiciel.",
+  "conseils": [],
+  "annotations": []
+}

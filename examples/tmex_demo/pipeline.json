@@ -1,0 +1,17 @@
+{
+  "evaluation": "evaluation.json",
+  "corrections": [
+    {
+      "numero": 2,
+      "file": "correction_2.json"
+    },
+    {
+      "numero": 31,
+      "file": "correction_31.json"
+    },
+    {
+      "numero": 3,
+      "file": "correction_3.json"
+    }
+  ]
+}

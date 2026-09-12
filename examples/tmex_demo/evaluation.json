@@ -1,0 +1,192 @@
+{
+  "cle": "tmex-demo-fictive-v1",
+  "sujet": {
+    "classe": "TMex DEMO",
+    "titre": "Savoir-faire - Exemple fictif",
+    "type": "interrogation",
+    "chapitres": "Équations",
+    "config_notes": {
+      "note_individuelle": {
+        "max": 15
+      },
+      "note_groupe": {
+        "max": 5,
+        "mode": "moyenne_camarades",
+        "sans_camarades": "zero"
+      },
+      "note_finale": {
+        "max": 20,
+        "arrondi": 0.5,
+        "arrondi_mode": "demi_superieur"
+      },
+      "absences": {
+        "mode": "exclure"
+      }
+    }
+  },
+  "versions": [
+    {
+      "version": "A",
+      "str_latex": "Résoudre $2x+3=11$, $3x-5=7$ et $5x+2=17$.",
+      "corrige_latex": "\\begin{align*}\n2x+3=11 &\\iff 2x=8 &\\iff x=4,\\\\\n3x-5=7 &\\iff 3x=12 &\\iff x=4,\\\\\n5x+2=17 &\\iff 5x=15 &\\iff x=3.\n\\end{align*}"
+    },
+    {
+      "version": "B",
+      "str_latex": "Résoudre $2x+1=9$, $3x-2=10$ et $5x-3=12$.",
+      "corrige_latex": "\\begin{align*}\n2x+1=9 &\\iff 2x=8 &\\iff x=4,\\\\\n3x-2=10 &\\iff 3x=12 &\\iff x=4,\\\\\n5x-3=12 &\\iff 5x=15 &\\iff x=3.\n\\end{align*}"
+    }
+  ],
+  "grilles": [
+    {
+      "nom": "Équations A",
+      "version": "A",
+      "validee": true,
+      "total_points": 15,
+      "exercices": [
+        {
+          "numero": "1",
+          "titre": "Équations du premier degré",
+          "questions": [
+            {
+              "numero": "1",
+              "texte": "Résoudre puis vérifier.",
+              "items": [
+                {
+                  "code": "E1Q1I1",
+                  "description": "Résolution justifiée et vérification",
+                  "bareme_max": 5,
+                  "regle_correction": "Ne pas pénaliser deux fois une erreur propagée."
+                }
+              ]
+            },
+            {
+              "numero": "2",
+              "texte": "Résoudre puis vérifier.",
+              "items": [
+                {
+                  "code": "E1Q2I1",
+                  "description": "Résolution justifiée et vérification",
+                  "bareme_max": 5,
+                  "regle_correction": "Ne pas pénaliser deux fois une erreur propagée."
+                }
+              ]
+            },
+            {
+              "numero": "3",
+              "texte": "Résoudre puis vérifier.",
+              "items": [
+                {
+                  "code": "E1Q3I1",
+                  "description": "Résolution justifiée et vérification",
+                  "bareme_max": 5,
+                  "regle_correction": "Ne pas pénaliser deux fois une erreur propagée."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nom": "Équations B",
+      "version": "B",
+      "validee": true,
+      "total_points": 30,
+      "exercices": [
+        {
+          "numero": "1",
+          "titre": "Équations du premier degré",
+          "questions": [
+            {
+              "numero": "1",
+              "texte": "Résoudre puis vérifier.",
+              "items": [
+                {
+                  "code": "E1Q1I1",
+                  "description": "Résolution justifiée et vérification",
+                  "bareme_max": 10,
+                  "regle_correction": "Ne pas pénaliser deux fois une erreur propagée."
+                }
+              ]
+            },
+            {
+              "numero": "2",
+              "texte": "Résoudre puis vérifier.",
+              "items": [
+                {
+                  "code": "E1Q2I1",
+                  "description": "Résolution justifiée et vérification",
+                  "bareme_max": 10,
+                  "regle_correction": "Ne pas pénaliser deux fois une erreur propagée."
+                }
+              ]
+            },
+            {
+              "numero": "3",
+              "texte": "Résoudre puis vérifier.",
+              "items": [
+                {
+                  "code": "E1Q3I1",
+                  "description": "Résolution justifiée et vérification",
+                  "bareme_max": 10,
+                  "regle_correction": "Ne pas pénaliser deux fois une erreur propagée."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "eleves": [
+    {
+      "numero": 2
+    },
+    {
+      "numero": 31
+    },
+    {
+      "numero": 3
+    },
+    {
+      "numero": 22
+    }
+  ],
+  "copies": [
+    {
+      "numero": 2,
+      "version": "A",
+      "statut": "present",
+      "pdf_path": "copies/eleve_2.pdf"
+    },
+    {
+      "numero": 31,
+      "version": "B",
+      "statut": "present",
+      "pdf_path": "copies/eleve_31.pdf"
+    },
+    {
+      "numero": 3,
+      "version": "A",
+      "statut": "present",
+      "pdf_path": "copies/eleve_3.pdf"
+    },
+    {
+      "numero": 22,
+      "version": "A",
+      "statut": "absent",
+      "pdf_path": ""
+    }
+  ],
+  "groupes": [
+    {
+      "numero": 1,
+      "eleves": [
+        2,
+        31,
+        3,
+        22
+      ]
+    }
+  ]
+}
