@@ -27,3 +27,9 @@ latex/build/*
 .DS_Store
 .vscode/
 .idea/
+
+# Packaging / tests
+build/
+dist/
+*.egg-info/
+.pytest_cache/

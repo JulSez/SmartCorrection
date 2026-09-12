@@ -13,3 +13,7 @@ Chaque fichier peut contenir :
 - adaptations de barème propres à la classe.
 
 Les remarques doivent être datées lorsqu'elles proviennent d'un retour sur une correction réelle.
+
+[`TMEX.md`](TMEX.md) reprend les consignes explicites disponibles des échanges
+antérieurs pour TMEX. Son état de complétude et les points restant à préciser sont
+indiqués dans le fichier. Le fournir à `prepare-ai` avec `--classe-md classes/TMEX.md`.

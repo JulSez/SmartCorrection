@@ -1,47 +1,34 @@
-# Architecture SmartCorrection
+# Architecture
 
-## Les quatre briques
+Le pipeline implémenté suit : JSON d'évaluation + corrections IA structurées → SQLite →
+calcul Python → fiches LaTeX, JSON, CSV, Markdown des grilles → compilation PDF optionnelle.
+`run` assemble le lot dans une transaction ; `render` recalcule les notes dans le même instantané
+que la lecture des détails. Les exports ne dépendent donc pas de caches de notes obsolètes.
 
-### 1. Grille
-La grille est proposée à partir du sujet, des savoir-faire et des remarques historiques de la classe.
+La proposition de grille reste une tâche interprétative : sujet, savoir-faire et mémoire de
+classe servent d'entrée à l'IA. L'enseignant valide le résultat. Le moteur importe les relations
+SQL, puis `prepare-ai` assemble le contexte et le squelette de correction pour une copie.
+Aucun appel IA ni lecture automatique d'une conversation n'intervient dans le calcul local.
 
-### 2. Correction / annotation
-Chaque copie produit une correction structurée : score par item, annotations et conseils.
+## Ce qui est normalisé
 
-### 3. Calcul des notes
-Le calcul est déterministe et réalisé localement par Python à partir des données de correction et des groupes.
+Sujet → Version → Corrigé ; Sujet → Grille → Exercice → Question → Item ;
+Élève → Copie → Correction → CorrectionItem ; Correction → Annotation/Conseil ;
+Sujet → Groupe → GroupeEleve. La configuration contient seulement des paramètres, sans
+formule arbitraire exécutable. Le modèle et les invariants sont décrits dans `data_model.md`.
 
-### 4. Croisement grille / correction / annotation
-Les annotations et scores sont reliés aux items de grille grâce à des identifiants stables.
+## Reproductibilité
 
-## Séparation des responsabilités
+Les sommes repartent toujours des points par item. Les grilles utilisées sont figées.
+La configuration et les groupes sont relus au recalcul. Les imports d'évaluation identiques
+retrouvent leur sujet et les remplacements de correction sont explicites et transactionnels.
+Les sorties JSON et LaTeX sont stables à données égales ; les identifiants techniques de lignes
+annotation/conseil sont omis des fiches pour rester stables après remplacement. Le manifeste
+SHA-256 permet de vérifier le lot exporté. Les PDF peuvent inclure des dates de compilation.
 
-- **Markdown** : mémoire pédagogique et références.
-- **SQLite** : données structurées et état réel des corrections.
-- **Python** : calculs et orchestration.
-- **LaTeX** : rendu.
-- **IA** : proposition de grille et interprétation des copies.
+## Suite concrète
 
-## Flux cible
-
-```text
-Sujet + savoir-faire + classe
-          ↓
-    proposition de grille
-          ↓
-       copies PDF
-          ↓
- correction structurée IA
-          ↓
-        SQLite
-          ↓
- moteur de notes Python
-          ↓
- préparation des données
-          ↓
-      LaTeX / exports
-```
-
-## Principe de reproductibilité
-
-Toute note finale doit pouvoir être recalculée à partir de la base et de la configuration du sujet, sans dépendre d'une conversation passée.
+Valider le logiciel sur une évaluation réelle fournie par l'enseignant, ajuster les exigences
+pédagogiques et le rendu, puis ajouter si utile la superposition des annotations sur les scans.
+Les prochains développements doivent partir des données réelles plutôt que d'un nouveau
+langage de formules ou d'une infrastructure distante.

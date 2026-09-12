@@ -1,0 +1,45 @@
+{
+  "items": [
+    {
+      "item_code": "E1Q1I1",
+      "points_obtenus": 4,
+      "statut": "partiel",
+      "annotation": "Détailler la vérification.",
+      "commentaire": null
+    },
+    {
+      "item_code": "E1Q2I1",
+      "points_obtenus": 4,
+      "statut": "partiel",
+      "annotation": "Détailler la vérification.",
+      "commentaire": null
+    },
+    {
+      "item_code": "E1Q3I1",
+      "points_obtenus": 4,
+      "statut": "partiel",
+      "annotation": "Détailler la vérification.",
+      "commentaire": null
+    }
+  ],
+  "commentaire_global": "Correction fictive destinée au test logiciel.",
+  "conseils": [
+    {
+      "item_code": "E1Q1I1",
+      "texte": "Remplacer x par la valeur trouvée dans les deux membres.",
+      "priorite": 1
+    }
+  ],
+  "annotations": [
+    {
+      "item_code": "E1Q1I1",
+      "page": 1,
+      "x": 0.2,
+      "y": 0.3,
+      "largeur": 0.5,
+      "hauteur": 0.1,
+      "texte": "Ajouter la vérification.",
+      "type_annotation": "remarque"
+    }
+  ]
+}

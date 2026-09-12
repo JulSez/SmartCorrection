@@ -19,3 +19,9 @@
 
 ### <AAAA-MM-JJ>
 - 
+
+## Adaptations spécifiques à la classe
+- À préciser avant utilisation.
+
+## Historique des décisions de barème
+- Date / évaluation / décision validée / raison pédagogique.

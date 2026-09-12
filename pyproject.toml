@@ -1,6 +1,6 @@
 [project]
 name = "smartcorrection"
-version = "0.1.0"
+version = "0.2.0"
 description = "Moteur local de correction, notation et rendu pour évaluations"
 requires-python = ">=3.11"
 dependencies = []
@@ -10,3 +10,10 @@ smartcorrection = "moteur.pipeline:main"
 
 [tool.setuptools]
 packages = ["moteur"]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-data]
+moteur = ["schema.sql"]
