@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# SQLite data
+*.sqlite
+*.sqlite3
+*.db
+
+# Generated exports
+exports/*
+!exports/.gitkeep
+
+# LaTeX build artefacts
+latex/build/*
+!latex/build/.gitkeep
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
