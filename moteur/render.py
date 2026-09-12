@@ -49,18 +49,25 @@ def build_student_data(conn, result, row):
 
 def render_student(student, subject, cfg):
     esc = tex_escape
-    peers = '; '.join(f"n° {p['numero']} : {fmt(p['note_individuelle'])}" + (' (absent)' if p['statut']=='absent' else '') for p in student['camarades']) or 'Aucun camarade'
+    individual_only = cfg.groupe_mode == 'aucun' or cfg.note_groupe_max == 0
     lines = [r'\documentclass[11pt,a4paper]{article}', r'\usepackage[utf8]{inputenc}',
              r'\usepackage[T1]{fontenc}', r'\usepackage{lmodern}', r'\IfFileExists{french.ldf}{\usepackage[french]{babel}}{}', r'\usepackage{amsmath,amssymb,longtable,array}',
              r'\usepackage[margin=18mm]{geometry}', r'\setlength{\parindent}{0pt}', r'\setlength{\parskip}{5pt}',
              r'\begin{document}', r'{\Large\bfseries '+esc(subject.get('titre') or 'Évaluation')+r'}\par',
              esc(f"{subject['classe']} - Élève n° {student['numero']} - Version {student['version'] or '?'}"),
-             r'\par\vspace{4mm}\renewcommand{\arraystretch}{1.5}',
-             r'\begin{tabular}{|p{.28\linewidth}|p{.36\linewidth}|p{.23\linewidth}|}\hline',
-             f"Note interro (/{fmt(cfg.note_individuelle_max)}) & Note groupe (/{fmt(cfg.note_groupe_max)}) & Note finale (/{fmt(cfg.note_finale_max)})"+r'\\\hline',
-             f"{fmt(student['note_individuelle'])} & {fmt(student['note_groupe'])}" +
-             r'\newline{\scriptsize '+esc(peers+f' (/{fmt(cfg.note_individuelle_max)})')+r'} & '+fmt(student['note_finale'])+r'\\\hline',
-             r'\end{tabular}']
+             r'\par\vspace{4mm}\renewcommand{\arraystretch}{1.5}']
+    if individual_only:
+        lines += [r'\begin{tabular}{|p{.40\linewidth}|}\hline',
+                  f"Note (/{fmt(cfg.note_finale_max)})"+r'\\\hline',
+                  fmt(student['note_finale'])+r'\\\hline',
+                  r'\end{tabular}']
+    else:
+        peers = '; '.join(f"n° {p['numero']} : {fmt(p['note_individuelle'])}" + (' (absent)' if p['statut']=='absent' else '') for p in student['camarades']) or 'Aucun camarade'
+        lines += [r'\begin{tabular}{|p{.28\linewidth}|p{.36\linewidth}|p{.23\linewidth}|}\hline',
+                  f"Note interro (/{fmt(cfg.note_individuelle_max)}) & Note groupe (/{fmt(cfg.note_groupe_max)}) & Note finale (/{fmt(cfg.note_finale_max)})"+r'\\\hline',
+                  f"{fmt(student['note_individuelle'])} & {fmt(student['note_groupe'])}" +
+                  r'\newline{\scriptsize '+esc(peers+f' (/{fmt(cfg.note_individuelle_max)})')+r'} & '+fmt(student['note_finale'])+r'\\\hline',
+                  r'\end{tabular}']
     if student['statut'] == 'absent':
         lines += [r'\par\textbf{Absence déclarée.}']
     else:
@@ -109,7 +116,6 @@ def compile_pdf(tex_path, timeout=60):
     if not pdf.is_file():
         raise RuntimeError('Aucun PDF produit')
     return pdf
-
 
 
 def export_grids(conn, sujet_id, directory):
