@@ -64,8 +64,18 @@ V4_SCHEMA = r'''
 DROP INDEX IF EXISTS copie_unique;
 DROP TRIGGER IF EXISTS validate_copie_insert;
 DROP TRIGGER IF EXISTS validate_copie_update;
+DROP TRIGGER IF EXISTS validate_correction_insert;
+DROP TRIGGER IF EXISTS validate_correction_update;
+DROP TRIGGER IF EXISTS freeze_version_identity;
 DROP TRIGGER IF EXISTS freeze_copy_identity;
 DROP TRIGGER IF EXISTS freeze_copy_pdf;
+DROP TRIGGER IF EXISTS freeze_pupil_class;
+DROP TRIGGER IF EXISTS freeze_subject_class;
+DROP TRIGGER IF EXISTS validate_copie_page_insert;
+DROP TRIGGER IF EXISTS validate_copie_page_update;
+DROP TRIGGER IF EXISTS freeze_copie_page_insert;
+DROP TRIGGER IF EXISTS freeze_copie_page_update;
+DROP TRIGGER IF EXISTS freeze_copie_page_delete;
 
 CREATE TABLE copie_v4 (
     id INTEGER PRIMARY KEY,
@@ -167,9 +177,10 @@ DROP TABLE item;
 ALTER TABLE item_new RENAME TO item;
 '''
         conn.execute('PRAGMA foreign_keys = OFF')
-        script = 'BEGIN IMMEDIATE;\n' + migration + SCHEMA.read_text(encoding='utf-8') + '\n' + V3_SCHEMA
+        base_schema = SCHEMA.read_text(encoding='utf-8') + '\n' + V3_SCHEMA
+        script = 'BEGIN IMMEDIATE;\n' + migration + base_schema
         if version < 4:
-            script += '\n' + V4_SCHEMA
+            script += '\n' + V4_SCHEMA + '\n' + base_schema
         conn.executescript(script)
         errors = conn.execute('PRAGMA foreign_key_check').fetchall()
         if errors:
