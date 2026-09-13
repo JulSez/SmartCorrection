@@ -175,3 +175,50 @@ test('format repair is only offered for response validation errors with complete
   await h.run("task(()=>post({action:'generer'}))");
   assert.equal(h.node('#exchange-error').innerHTML, '');
 });
+
+test('saving advances preparation only after success and offers each missing reference',async()=>{
+  for(const [stage,start,versions,expected,nextVersion] of [
+    ['grille',1,[{version:'A',corrige_latex:''}],2,null],
+    ['corrige:A',2,[{version:'A',corrige_latex:'ok'},{version:'B',corrige_latex:''}],2,'B'],
+    ['corrige:A',2,[{version:'A',corrige_latex:'ok'}],3,null],
+    ['copies',3,[],4,null],
+    ['correction',4,[],4,null],
+    ['correction',5,[],5,null],
+  ]){
+    const h=harness();
+    h.run(`current=${start};referenceVersion=null;lastPreview={};previewText='{}';renderDossier=()=>{};`);
+    h.node('#response').dataset.stage=stage;h.node('#response').value='{}';
+    const server={dossier:{id:'demo',revision:1,echantillon_valide:false},versions};
+    const calls=[];
+    h.context.fetch=async(_url,options)=>{
+      if(options)calls.push(JSON.parse(options.body));
+      return {ok:true,json:async()=>server};
+    };
+    await h.run('submitResponse(true)');
+    assert.equal(h.run('current'),expected,stage);
+    assert.equal(h.run('referenceVersion'),nextVersion);
+    assert.equal(h.run('state.dossier.echantillon_valide'),false);
+    assert.equal(calls.length,1);
+    assert.equal(calls[0].valider,true);
+  }
+  const h=harness();
+  h.run("current=1;lastPreview={};previewText='{}';drafts.set('demo:grille','{}');");
+  h.node('#response').dataset.stage='grille';h.node('#response').value='{}';
+  h.context.fetch=async()=>({ok:false,json:async()=>({erreur:'Grille invalide'})});
+  await h.run('submitResponse(true)');
+  assert.equal(h.run('current'),1);
+  assert.equal(h.run("drafts.get('demo:grille')"),'{}');
+});
+
+test('exchange panels expose IA wording and primary actions, with exports in more options',()=>{
+  const h=harness();
+  const html=h.run("exchangePanel('grille')");
+  assert.match(html,/Consigne à copier dans l’IA/);
+  assert.match(html,/Résultat de l’IA/);
+  assert.match(html,/id="copy-prompt" disabled>Copier<\/button>/);
+  assert.match(html,/Enregistrer et continuer/);
+  assert.doesNotMatch(source,/ChatGPT|chatgpt\.com/);
+  h.run('renderCorrection(false)');
+  assert.match(h.node('#main').innerHTML,/Voir les fiches du test/);
+  assert.match(h.node('#main').innerHTML,/<details class="more-options"><summary>Plus d’options<\/summary><button id="generate-tex"/);
+});

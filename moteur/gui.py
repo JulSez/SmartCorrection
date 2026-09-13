@@ -1,4 +1,4 @@
-"""Local browser application; standard-library HTTP, no hosted service or ChatGPT API."""
+"""Local browser application; standard-library HTTP, no hosted service or AI API."""
 from __future__ import annotations
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -95,7 +95,7 @@ def make_server(app, port=0):
             except (ValueError,KeyError,TypeError,OSError,sqlite3.Error,RuntimeError) as exc:
                 message=str(exc)
                 if isinstance(exc,PermissionError):
-                    message='Accès aux fichiers refusé. Fermez les PDF ouverts, puis réessayez. Si le problème persiste, vérifiez les droits du dossier de sortie et si sa synchronisation le verrouille. Ce problème se traite dans Windows, pas dans ChatGPT.\n\n'+message
+                    message='Accès aux fichiers refusé. Fermez les PDF ouverts, puis réessayez. Si le problème persiste, vérifiez les droits du dossier de sortie et si sa synchronisation le verrouille. Ce problème se traite dans Windows, pas auprès de l’IA.\n\n'+message
                 reparable=(isinstance(exc,ValueError) and isinstance(data,dict)
                            and data.get('action') in {'echange','corrige'})
                 self._send(400,{'erreur':message,'reponse_reparable':reparable})

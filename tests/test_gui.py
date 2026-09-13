@@ -309,7 +309,7 @@ class GuiWorkflowTests(unittest.TestCase):
                 message=json.load(caught.exception)
                 self.assertEqual(message['reponse_reparable'],reparable)
                 if isinstance(error,PermissionError):
-                    self.assertIn('pas dans ChatGPT',message['erreur'])
+                    self.assertIn('pas auprès de l’IA',message['erreur'])
         self.assertEqual(urllib.request.urlopen(url+'/app.js').status, 200)
         with self.assertRaises(ValueError):
             self.app.file('rendu', 'unknown', '../../db.sqlite')

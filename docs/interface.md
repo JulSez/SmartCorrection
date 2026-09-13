@@ -12,8 +12,8 @@ ou `python`, installe la dépendance Python de l’interface si elle manque, pui
 Garder la fenêtre de lancement ouverte. Ctrl+C arrête le serveur ; les données restent enregistrées.
 
 L’application ouvre `http://127.0.0.1:8765`. Elle fonctionne sans serveur distant ni clé API.
-Les échanges avec ChatGPT se font par copier-coller et pièces jointes dans une conversation
-ouverte par l’enseignant. Ajouter un PDF dans SmartCorrection ne le transmet pas à ChatGPT.
+Les échanges avec l’IA se font par copier-coller et pièces jointes dans une conversation
+ouverte par l’enseignant. Ajouter un PDF dans SmartCorrection ne le transmet pas à l’IA.
 
 LaTeX reste nécessaire pour les PDF : une distribution TeX Live ou MiKTeX avec `pdflatex`,
 AMS, Geometry, Longtable et Latin Modern. Babel français est recommandé.
@@ -25,7 +25,7 @@ le sujet, la version, la classe et l'élève, puis la note (une ligne, deux colo
 **Question / Description du critère / Note / Retour** et les conseils. À droite figure le corrigé
 intégral. Les titres sont bleus et les en-têtes de tableaux bleu clair. Un contenu long continue
 du même côté sur les feuilles suivantes. Imprimer à taille réelle, sans agrandissement.
-Les noms restent locaux : les afficher sur les fiches ne les ajoute pas aux consignes ChatGPT.
+Les noms restent locaux : les afficher sur les fiches ne les ajoute pas aux consignes pour l’IA.
 
 Exemple fictif du rendu (aucune donnée d'élève réelle) :
 
@@ -55,16 +55,16 @@ Les classes, dossiers, réponses en cours, documents générés et consignes sur
 
 | Écran | Action de l’enseignant | Résultat conservé |
 |---|---|---|
-| Préparer le dossier | Ajouter le paquet PDF, le sujet, les documents facultatifs ; copier la procédure dans ChatGPT et y joindre les PDF | Documents locaux et consignes utilisées au démarrage |
+| Préparer le dossier | Ajouter le paquet PDF, le sujet, les documents facultatifs ; copier la procédure dans l’IA et y joindre les PDF | Documents locaux et consignes utilisées au démarrage |
 | Grille | Discuter uniquement les critères et le barème ; coller le bloc JSON ; vérifier et valider | Grille relationnelle validée |
 | Corrigé | Envoyer la consigne dédiée ; coller le bloc LaTeX complet pour chaque version ; vérifier et valider | Corrigés par version, consultables et modifiables dans ce menu |
 | Repérer les copies | Coller le JSON des pages ; relire et rectifier au besoin identités, pages et versions dans le tableau | Copies logiques, pages physiques du paquet et absences déclarées |
 | Tester la correction | Choisir une à cinq copies ; coller leurs corrections ; générer les fiches ; demander des ajustements ; valider l’échantillon | Corrections structurées et PDF d’essai |
 | Corriger le reste | Copier la consigne pour toutes les copies restantes ; importer les réponses ; générer le document final | Fiches PDF assemblées, données JSON, notes CSV et sources LaTeX |
-| Retour d’expérience | Demander à ChatGPT de réécrire les consignes ; comparer puis valider les deux textes complets | Nouvelles consignes générales et de classe, avec historique |
+| Retour d’expérience | Demander à l’IA de réécrire les consignes ; comparer puis valider les deux textes complets | Nouvelles consignes générales et de classe, avec historique |
 
 La correction de l’échantillon peut être remplacée autant que nécessaire. Le reste n’impose
-pas une succession de lots de cinq : si ChatGPT doit fractionner sa réponse, chaque réponse
+pas une succession de lots de cinq : si l’IA doit fractionner sa réponse, chaque réponse
 peut contenir plusieurs **copies complètes**. L’écran indique les copies encore à traiter.
 
 La notation de cette première interface est **individuelle, sur 20, arrondie au demi-point**.
@@ -84,11 +84,11 @@ correction. Le CLI `calculate` conserve son exigence d’identification de toute
 Le numéro d’une copie déjà attribuée et corrigée ne peut pas être changé silencieusement.
 
 Les consignes ne transmettent ni la liste de classe (noms, prénoms, numéros), ni les noms des
-fichiers joints. ChatGPT repère les copies dans le PDF avec des références `C001`, etc. et
+fichiers joints. L’IA repère les copies dans le PDF avec des références `C001`, etc. et
 renvoie `numero: null`. L’enseignant associe les élèves dans le tableau local de prévisualisation
 de l’inventaire, puis vérifie et valide. Les sélections envoyées pour correction ne contiennent
 que les références, versions et pages, jamais l’identité locale. Cela n’anonymise pas les PDF :
-les noms présents sur les copies jointes restent visibles pour ChatGPT.
+les noms présents sur les copies jointes restent visibles pour l’IA.
 
 Toutes les pages du paquet doivent être affectées exactement une fois, soit à une copie, soit
 à `pages_ignorees` avec un motif. Les pages peuvent être non contiguës. Aucun élève manquant
@@ -103,14 +103,14 @@ après vérification ou importer une correction mise à jour. Les rendus antéri
 « à régénérer ». Une compilation échouée ne publie pas de PDF partiel.
 
 Un message Windows « Accès refusé » concerne les fichiers locaux et ne doit pas être envoyé
-à ChatGPT pour réparation du JSON. Fermer les PDF ouverts puis réessayer ; si l’erreur persiste,
+à l’IA pour réparation du JSON. Fermer les PDF ouverts puis réessayer ; si l’erreur persiste,
 vérifier les droits du dossier de sortie et un éventuel verrouillage par sa synchronisation.
 L’export réessaie brièvement les opérations de création, suppression et renommage bloquées.
 Si le nettoyage du dossier temporaire échoue aussi, l’erreur initiale reste affichée. La demande
 de réparation de format est réservée aux validations de réponses, avec une consigne et une
 réponse non vides ; elle n’apparaît plus pour les erreurs de génération ou d’accès aux fichiers.
 
-## Format à demander à ChatGPT
+## Format à demander à l’IA
 
 Le bouton « Je valide l’échantillon » a été supprimé : passer de **Tester la correction** à
 **Corriger le reste**, avec « Étape suivante » ou le menu latéral, valide l’échantillon avant
@@ -120,15 +120,15 @@ Revenir à une étape précédente ne valide rien. Les validations du JSON et de
 pédagogiques restent explicites.
 
 La consigne s’affiche automatiquement à l’ouverture de chaque étape. Cliquer sur
-« Copier la consigne pour ChatGPT », puis l’envoyer dans la conversation ChatGPT. Coller ensuite
-la réponse de ChatGPT dans la zone de droite, la vérifier et la valider. Aucun clic de génération
+« Copier », puis l’envoyer dans la conversation avec l’IA. Coller ensuite
+la réponse de l’IA dans la zone de droite, puis cliquer sur « Vérifier » et « Enregistrer et continuer ». Aucun clic de génération
 n’est nécessaire. Après un changement de sélection des copies, enregistrer la sélection :
-la consigne s’actualise automatiquement. Les documents doivent être joints séparément dans ChatGPT.
+la consigne s’actualise automatiquement. Les documents doivent être joints séparément dans l’IA.
 
 Utiliser en priorité cette consigne : elle contient l’identifiant du dossier,
 la révision courante, les items et les références des copies concernés, sans liste nominative. Les formats ci-dessous
 sont ceux de l’interface ; les commandes CLI conservent [leurs contrats](correction_format.md).
-Le rendu final de ChatGPT est **un unique bloc de code** `json` (ou `latex` pour le corrigé),
+Le rendu final de l’IA est **un unique bloc de code** `json` (ou `latex` pour le corrigé),
 sans texte autour ni autre mise en forme Markdown. Utiliser le bouton « Copier » du bloc.
 L’application accepte le contenu brut ainsi qu’un bloc complet avec ses balises ; elle ne
 cherche pas de données au milieu d’une discussion. Le JSON reste strict : sans commentaires,
@@ -138,7 +138,7 @@ Chaque consigne est composée de deux parties. Le **bloc technique fixe** est g�
 l’application et décrit le format entrée/sortie : enveloppe, champs autorisés, types JSON,
 valeurs nulles possibles, absence de calcul de notes et règle « réponse machine uniquement ».
 Il ne doit pas être réécrit pendant la discussion. Le bloc pédagogique est variable : il contient
-le sujet, la classe, la grille, le corrigé, les copies et les décisions de l’enseignant. ChatGPT
+le sujet, la classe, la grille, le corrigé, les copies et les décisions de l’enseignant. L’IA
 peut le discuter et le préciser, puis doit produire le format fixé par le premier bloc.
 
 ### Grille
@@ -208,7 +208,7 @@ Le menu Corrigé dispose d’une grande zone de saisie redimensionnable ; l’ap
 plus plafonné en hauteur. Un corrigé enregistré est rechargé intégralement quand on revient
 dans ce menu ; un brouillon en cours reste prioritaire. Aucun nombre de pages ni plafond de
 caractères propre au corrigé n’est imposé. La protection générale des requêtes HTTP reste de
-160 Mio (un dépassement est refusé, jamais tronqué). ChatGPT doit développer toutes les questions
+160 Mio (un dépassement est refusé, jamais tronqué). L’IA doit développer toutes les questions
 et laisser LaTeX répartir le corrigé sur plusieurs pages, sans le condenser pour tenir sur une page.
 
 ### Corrections
@@ -237,7 +237,7 @@ est obligatoire et non vide. Les statuts facultatifs sont `acquis`, `partiel`, `
 `non_repondu`. Les annotations sont liées aux items et à une page appartenant à cette copie.
 Les coordonnées facultatives suivent [le contrat commun](correction_format.md).
 
-Aucun total, `copie_id`, `grille_id` ou groupe n’est attendu de ChatGPT ici. L’application résout
+Aucun total, `copie_id`, `grille_id` ou groupe n’est attendu de l’IA ici. L’application résout
 les références puis appelle l’importeur commun. Pour corriger une réponse antérieure, fournir
 de nouveau tous les items de la copie concernée. Les réponses acceptées restent dans l’historique
 d’échanges SQL ; les tables de correction contiennent la dernière version validée.
@@ -289,3 +289,9 @@ Les annotations sont listées sur la fiche, pas dessinées sur le scan original.
 joints à ce premier parcours doivent être des PDF. Les variantes de notation et groupes restent
 accessibles dans le moteur CLI. Les tests utilisent des évaluations **fictives** : la relecture
 d’un paquet réel, du rendu et du parcours Windows reste une étape de validation enseignant.
+
+### Boutons et lecture du parcours
+
+Les deux zones restent visibles : **Consigne à copier dans l’IA**, avec **Copier** en dessous, et **Résultat de l’IA**. Après **Vérifier**, **Enregistrer et continuer** enregistre la grille, le corrigé ou l’inventaire et ouvre la suite. Les versions de corrigé manquantes sont proposées successivement.
+
+Pour les corrections, **Enregistrer les corrections** reste sur la page afin de relire les fiches ou d’importer une autre réponse. **Voir les fiches du test** ouvre le PDF ; passer à l’étape suivante valide ensuite l’échantillon. **Créer le PDF final** produit le rendu complet. Les sources LaTeX et les documents précédents sont dans **Plus d’options**.
