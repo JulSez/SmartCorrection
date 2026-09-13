@@ -30,10 +30,37 @@ Un import identique d'évaluation retrouve le même sujet. Les corrections exist
 python -m moteur run examples/tmex_demo/pipeline.json --db db/demo.sqlite --output exports/demo-v2 --replace --pdf
 ```
 
+## Importer une classe depuis un CSV
+
+Une liste de classe peut rester entièrement locale. Placer par exemple le fichier dans `private/`
+(ce dossier est ignoré par Git), avec les colonnes `nom,prenom` :
+
+```csv
+nom,prenom
+DUPONT,Alice
+MARTIN,Léo
+```
+
+Puis importer la classe :
+
+```sh
+smartcorrection import-classe private/1GSpe.csv --classe "1GSpé" --db db/1gspe.sqlite
+```
+
+Les séparateurs virgule, point-virgule et tabulation sont acceptés, ainsi que les en-têtes avec
+accents (`Prénom`). Si la colonne `numero` est absente, l'ordre des lignes du CSV attribue les
+numéros 1, 2, 3, etc. Une colonne `numero` peut être fournie pour imposer des numéros stables.
+Un nouvel import identique est idempotent ; un nom différent pour un numéro déjà utilisé est
+refusé sans modification partielle.
+
+Une évaluation de la même classe peut ensuite référencer directement ces numéros dans `copies`
+ou `groupes`, sans recopier les noms dans `evaluation.json`.
+
 ## Utilisation sur une vraie évaluation
 
-1. Préparer `classes/<classe>.md`, les savoir-faire et le JSON d'évaluation suivant
-   [le contrat](docs/evaluation_format.md). Les chemins des copies sont relatifs au JSON.
+1. Importer éventuellement la classe depuis un CSV local, puis préparer `classes/<classe>.md`,
+   les savoir-faire et le JSON d'évaluation suivant [le contrat](docs/evaluation_format.md).
+   Les chemins des copies sont relatifs au JSON.
 2. Relire la grille ; inscrire `validee: true` seulement après cette revue, ou la valider en CLI.
 3. Importer l'évaluation et les copies, puis préparer le contexte à transmettre à l'IA :
 
@@ -63,7 +90,7 @@ pour un lot complet. `python -m moteur --help` liste les commandes.
 - **SQLite** : sujet, versions, corrigés, grilles, items, copies, corrections, annotations, conseils et groupes normalisés.
 - **Markdown** : mémoire par classe et grilles lisibles ; aucune modification automatique des règles pédagogiques.
 - **Python** : validation stricte, transactions, calcul configurable, orchestration, exports et contexte IA.
-- **LaTeX** : trois colonnes de notes, détails des camarades en petit, bilan par item, annotations, conseils et corrigé de la version.
+- **LaTeX** : rendu des notes, bilan par item, annotations, conseils et corrigé de la version.
 - **IA** : intervention extérieure au moteur pour proposer les grilles et interpréter les copies.
 
 [Configuration des notes](configs/README.md) · [Modèle et migration](docs/data_model.md) ·
