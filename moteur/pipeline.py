@@ -6,6 +6,7 @@ import sqlite3
 import sys
 from .db import DEFAULT_DB, database, init_db
 from .import_classe import import_classe_csv
+from .import_copies import import_copies_csv
 from .import_correction import import_correction, import_correction_json, compatible_grid
 from .import_evaluation import import_evaluation, import_evaluation_json
 from .calcul import calculate, calculate_notes
@@ -53,14 +54,24 @@ def ai_packet(conn, copy_id, classe_path=None, savoir_faire=()):
         raise ValueError('Valider la grille avant de préparer une correction IA')
     version = conn.execute('SELECT * FROM version WHERE id=?', (copy['version_id'],)).fetchone()
     corrige = conn.execute('SELECT str_latex FROM corrige WHERE version_id=?', (copy['version_id'],)).fetchone()
+    pages = [row['page'] for row in conn.execute(
+        'SELECT page FROM copie_page WHERE copie_id=? ORDER BY ordre', (copy_id,)
+    )]
     items = [dict(r) for r in conn.execute('''SELECT i.code,i.description,i.bareme_max,i.regle_correction,
         e.numero exercice,q.numero question,q.texte FROM item i JOIN question q ON q.id=i.question_id
         JOIN exercice e ON e.id=q.exercice_id WHERE i.grille_id=? ORDER BY e.ordre,q.ordre,i.ordre''', (gid,))]
-    return {'copie': dict(copy), 'grille_id': gid, 'version': dict(version) if version else None,
+    source = {'pdf_path': copy['pdf_path'], 'pages': pages or None}
+    page_rule = (
+        'La copie est dans un PDF partagé : lire uniquement les pages indiquées dans source.pages '
+        'et utiliser les numéros de page du PDF source dans annotations.page. '
+        if pages else ''
+    )
+    return {'copie': dict(copy), 'source': source, 'grille_id': gid,
+            'version': dict(version) if version else None,
             'corrige_latex': corrige[0] if corrige else None, 'items': items,
             'memoire_classe': Path(classe_path).read_text(encoding='utf-8') if classe_path else None,
             'savoir_faire': [{'fichier': str(p), 'texte': Path(p).read_text(encoding='utf-8')} for p in savoir_faire],
-            'consigne': 'Produire uniquement le JSON du contrat docs/correction_format.md. Un score pour chaque item, aucun total. Ne pas inventer une réponse illisible : demander une revue humaine avant import.',
+            'consigne': page_rule + 'Produire uniquement le JSON du contrat docs/correction_format.md. Un score pour chaque item, aucun total. Ne pas inventer une réponse illisible : demander une revue humaine avant import.',
             'reponse_structure': {'copie_id': copy_id, 'grille_id': gid, 'items': [
                 {'item_code': item['code'], 'points_obtenus': None, 'statut': None, 'commentaire': None, 'annotation': None}
                 for item in items], 'annotations': [], 'conseils': [], 'commentaire_global': None}}
@@ -70,24 +81,31 @@ def build_parser():
     parser = argparse.ArgumentParser(prog='smartcorrection')
     sub = parser.add_subparsers(dest='command', required=True)
     for name, help_text in (
-        ('init-db', 'Initialiser ou migrer SQLite'), ('import-classe', 'Importer une classe depuis un CSV'),
+        ('init-db', 'Initialiser ou migrer SQLite'),
+        ('import-classe', 'Importer une classe depuis un CSV'),
+        ('import-copies', 'Associer les élèves aux pages d’un PDF partagé'),
         ('import-evaluation', 'Importer une évaluation complète'),
-        ('import-correction', 'Importer une correction validée'), ('calculate', 'Calculer les notes depuis SQLite'),
-        ('render', 'Recalculer puis exporter les fiches'), ('run', 'Exécuter un manifeste complet'),
-        ('prepare-ai', 'Préparer le contexte et le squelette de réponse IA'), ('validate-grid', 'Valider une grille après revue')):
+        ('import-correction', 'Importer une correction validée'),
+        ('calculate', 'Calculer les notes depuis SQLite'),
+        ('render', 'Recalculer puis exporter les fiches'),
+        ('run', 'Exécuter un manifeste complet'),
+        ('prepare-ai', 'Préparer le contexte et le squelette de réponse IA'),
+        ('validate-grid', 'Valider une grille après revue')):
         p = sub.add_parser(name, help=help_text)
         p.add_argument('--db', default=str(DEFAULT_DB))
-        if name in {'import-classe', 'import-evaluation', 'import-correction', 'run'}:
+        if name in {'import-classe', 'import-copies', 'import-evaluation', 'import-correction', 'run'}:
             p.add_argument('file')
         if name == 'import-classe':
             p.add_argument('--classe', required=True)
-        if name in {'import-correction','run'}:
+        if name in {'import-copies', 'import-correction', 'run'}:
             p.add_argument('--replace', action='store_true')
-        if name in {'import-evaluation','run'}:
+        if name in {'import-evaluation', 'run'}:
             p.add_argument('--check-pdfs', action='store_true')
-        if name in {'calculate','render'}:
+        if name in {'import-copies', 'calculate', 'render'}:
             p.add_argument('--sujet', type=int, required=True)
-        if name in {'render','run'}:
+        if name == 'import-copies':
+            p.add_argument('--pdf', required=True, help='PDF source commun aux copies du CSV')
+        if name in {'render', 'run'}:
             p.add_argument('--output', required=True)
             p.add_argument('--pdf', action='store_true')
         if name == 'prepare-ai':
@@ -111,6 +129,8 @@ def main(argv=None):
             value = {'base': str(init_db(args.db))}
         elif command == 'import-classe':
             value = import_classe_csv(args.file, args.classe, args.db)
+        elif command == 'import-copies':
+            value = import_copies_csv(args.file, args.sujet, args.pdf, args.db, args.replace)
         elif command == 'import-evaluation':
             init_db(args.db)
             value = {'sujet_id': import_evaluation_json(args.file, args.db, args.check_pdfs)}
