@@ -14,7 +14,7 @@ from moteur.calcul import calculate_notes
 from moteur.db import database
 from moteur.gui import make_server
 from moteur.gui_prompts import make_prompt
-from moteur.gui_service import Application
+from moteur.gui_service import Application, response_body
 
 
 class GuiWorkflowTests(unittest.TestCase):
@@ -197,11 +197,76 @@ class GuiWorkflowTests(unittest.TestCase):
     def test_prompts_have_a_fixed_machine_contract(self):
         prompt = make_prompt(self.app, self.ident, 'grille')
         self.assertIn('BLOC TECHNIQUE FIXE', prompt)
-        self.assertIn('pas de ```json', prompt)
+        self.assertIn('un unique bloc de code ```json', prompt)
         self.assertIn('objet JSON valide', prompt)
         latex = make_prompt(self.app, self.ident, 'corrige', 'A')
         self.assertIn('Rends uniquement le corps LaTeX', latex)
+        self.assertIn('un unique bloc de code ```latex', latex)
         self.assertIn('sans \\documentclass', latex)
+        self.assertIn('plusieurs pages', latex)
+        self.finish()
+        for stage in ('ouverture', 'grille', 'copies', 'correction', 'retour'):
+            with self.subTest(stage=stage):
+                text = make_prompt(self.app, self.ident, stage)
+                self.assertIn('un unique bloc de code ```json', text)
+                self.assertNotIn('sans bloc Markdown', text)
+                self.assertNotIn('sans balises Markdown', text)
+
+    def test_prompts_do_not_include_roster_or_filenames(self):
+        self.finish()
+        with database(self.app.db_path) as conn:
+            conn.execute('UPDATE ui_fichier SET nom=? WHERE id=?', ('Alice_Alpha_copies.pdf', self.source['id']))
+            conn.execute('UPDATE eleve SET numero=424242 WHERE classe=? AND numero=1', ('TEST',))
+            conn.execute('UPDATE ui_copie SET a_revoir=? WHERE reference=?', ('Alice Alpha à vérifier', 'C001'))
+        for stage in ('ouverture', 'grille', 'corrige', 'copies', 'correction', 'retour'):
+            with self.subTest(stage=stage):
+                text = make_prompt(self.app, self.ident, stage, version='A')
+                for pupil in self.app.state(self.ident)['eleves']:
+                    self.assertNotIn(pupil['nom'], text)
+                    self.assertNotIn(pupil['prenom'], text)
+                self.assertNotIn('424242', text)
+                self.assertNotIn('Alice_Alpha_copies.pdf', text)
+        self.assertIn('numero:null', make_prompt(self.app, self.ident, 'copies'))
+        self.assertIn('C001', make_prompt(self.app, self.ident, 'correction'))
+
+    def test_code_blocks_import_and_preview_without_weakening_json_validation(self):
+        raw = json.dumps(self.envelope(self.corrections(['C001'])))
+        block = '```json\n' + raw + '\n```'
+        self.app.exchange(self.ident, 'correction', block, False)
+        self.assertFalse(any(c['correction_id'] for c in self.app.state(self.ident)['copies']))
+        self.app.exchange(self.ident, 'correction', block, True)
+        self.assertTrue(next(c for c in self.app.state(self.ident)['copies'] if c['reference'] == 'C001')['correction_id'])
+        for content in ('{"x":1,"x":2}', '{"x":NaN}', '{"x":1,}'):
+            with self.subTest(content=content), self.assertRaises(ValueError):
+                self.app.exchange(self.ident, 'correction', '```json\n' + content + '\n```', True)
+
+    def test_code_block_boundaries_are_strict(self):
+        self.assertEqual(response_body('  ```JSON\r\n{}\r\n```\n', 'json'), '{}')
+        self.assertEqual(response_body('```\n{}\n```', 'json'), '{}')
+        self.assertEqual(response_body('```tex\nTexte.\n```', 'latex'), 'Texte.')
+        for text in ('Voici :\n```json\n{}\n```', '```json\n{}\n```\nSuite',
+                     '```json\n{}', '```python\n{}\n```', '```json\n{}\n```\n```json\n{}\n```'):
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                response_body(text, 'json')
+        with self.assertRaisesRegex(ValueError, 'préambule'):
+            self.app.corrige(self.ident, 'A', '```latex\n'+r'\documentclass{article}'+'\n```', True)
+
+    def test_long_reference_is_preserved_in_drafts_database_prompts_and_exports(self):
+        text = ('Démonstration détaillée. $2x+3=7$.\n\n' * 7000) + 'FIN DU CORRIGÉ.'
+        self.assertGreater(len(text), 200000)
+        self.app.draft(self.ident, 'corrige:A', text)
+        app = Application(self.app.db_path, self.app.data_dir, self.root/'legacy')
+        self.assertEqual(app.state(self.ident)['brouillons']['corrige:A'], text)
+        result = app.corrige(self.ident, 'A', '```latex\n' + text + '\n```', True)
+        self.assertEqual(result['caracteres'], len(text))
+        self.assertEqual(app.state(self.ident)['versions'][0]['corrige_latex'], text)
+        self.assertNotIn('corrige:A', app.state(self.ident)['brouillons'])
+        self.exchange('correction', self.corrections(['C001']))
+        app.sample(self.ident, ['C001'])
+        self.assertIn('FIN DU CORRIGÉ.', make_prompt(app, self.ident, 'correction'))
+        result = app.generate(self.ident, pdf=False)
+        self.assertIn(text, app.file('rendu', result['id'], 'eleve_001.tex').read_text())
+
     def test_http_origin_token_and_file_boundaries(self):
         server = make_server(self.app)
         thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
