@@ -201,6 +201,46 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(rows[3]['note_groupe'],0)
         self.assertEqual([p['numero'] for p in rows[2]['camarades']],[31])
 
+    def test_export_retries_a_temporary_directory_lock(self):
+        from unittest.mock import patch
+        sid=self.corrected();out=self.root/'locked-export'
+        original_rename=Path.rename
+        attempts=[]
+        def locked_once(source, destination):
+            attempts.append(source)
+            if len(attempts)==1:
+                raise PermissionError(13,'Accès refusé',str(source))
+            return original_rename(source,destination)
+        with patch.object(Path,'rename',locked_once), patch('moteur.render.time.sleep'):
+            with database(self.db) as conn:
+                export_results(conn,calculate(conn,sid),out)
+        self.assertEqual(len(attempts),2)
+        self.assertTrue((out/'manifest.json').is_file())
+        self.assertFalse(list(self.root.glob('.smartcorrection-*')))
+
+    def test_persistent_export_lock_never_publishes_a_partial_result(self):
+        from unittest.mock import patch
+        with patch.object(Path,'rename',side_effect=PermissionError('Dossier verrouillé')) as rename, patch('moteur.render.time.sleep'):
+            with self.assertRaisesRegex(PermissionError,'Dossier verrouillé'):
+                run_pipeline(EXAMPLE/'pipeline.json',self.db,self.root/'locked-export')
+        self.assertEqual(rename.call_count,4)
+        self.assertFalse((self.root/'locked-export').exists())
+        self.assertFalse(list(self.root.glob('.smartcorrection-*')))
+        with database(self.db) as conn:
+            self.assertEqual(conn.execute('SELECT COUNT(*) FROM sujet').fetchone()[0],0)
+
+    def test_cleanup_access_denied_does_not_hide_compilation_error(self):
+        from unittest.mock import patch
+        with patch('moteur.render.compile_pdf',side_effect=RuntimeError('Erreur LaTeX initiale')), \
+             patch('moteur.render.shutil.rmtree',side_effect=PermissionError('Accès refusé')), \
+             patch('moteur.render.time.sleep'):
+            with self.assertRaisesRegex(RuntimeError,'Erreur LaTeX initiale') as caught:
+                run_pipeline(EXAMPLE/'pipeline.json',self.db,self.root/'failed-pdf',pdf=True)
+        self.assertIn('Nettoyage temporaire impossible',caught.exception.__notes__[0])
+        self.assertFalse((self.root/'failed-pdf').exists())
+        with database(self.db) as conn:
+            self.assertEqual(conn.execute('SELECT COUNT(*) FROM sujet').fetchone()[0],0)
+
     def test_partial_data_in_sql_is_not_treated_as_zero(self):
         sid=self.corrected()
         with database(self.db) as c:

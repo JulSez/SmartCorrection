@@ -87,6 +87,14 @@ annule la validation de l’échantillon. L’enseignant peut confirmer une corr
 après vérification ou importer une correction mise à jour. Les rendus antérieurs sont marqués
 « à régénérer ». Une compilation échouée ne publie pas de PDF partiel.
 
+Un message Windows « Accès refusé » concerne les fichiers locaux et ne doit pas être envoyé
+à ChatGPT pour réparation du JSON. Fermer les PDF ouverts puis réessayer ; si l’erreur persiste,
+vérifier les droits du dossier de sortie et un éventuel verrouillage par sa synchronisation.
+L’export réessaie brièvement les opérations de création, suppression et renommage bloquées.
+Si le nettoyage du dossier temporaire échoue aussi, l’erreur initiale reste affichée. La demande
+de réparation de format est réservée aux validations de réponses, avec une consigne et une
+réponse non vides ; elle n’apparaît plus pour les erreurs de génération ou d’accès aux fichiers.
+
 ## Format à demander à ChatGPT
 
 La consigne s’affiche automatiquement à l’ouverture de chaque étape. Cliquer sur

@@ -79,6 +79,7 @@ def make_server(app, port=0):
                 return self._send(403,{'erreur':'Requête non autorisée. Recharger la page.'})
             if self.path!='/api/action' or self.headers.get('Content-Type','').split(';')[0]!='application/json':
                 return self._send(400,{'erreur':'Requête JSON attendue'})
+            data={}
             try:
                 length=int(self.headers.get('Content-Length','0'))
                 if length<=0 or length>MAX_BODY:
@@ -90,7 +91,12 @@ def make_server(app, port=0):
                     result=dispatch(app,data)
                 self._send(200,result)
             except (ValueError,KeyError,TypeError,OSError,sqlite3.Error,RuntimeError) as exc:
-                self._send(400,{'erreur':str(exc)})
+                message=str(exc)
+                if isinstance(exc,PermissionError):
+                    message='Accès aux fichiers refusé. Fermez les PDF ouverts, puis réessayez. Si le problème persiste, vérifiez les droits du dossier de sortie et si sa synchronisation le verrouille. Ce problème se traite dans Windows, pas dans ChatGPT.\n\n'+message
+                reparable=(isinstance(exc,ValueError) and isinstance(data,dict)
+                           and data.get('action') in {'echange','corrige'})
+                self._send(400,{'erreur':message,'reponse_reparable':reparable})
 
     return ThreadingHTTPServer(('127.0.0.1',port),Handler)
 

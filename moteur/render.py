@@ -7,6 +7,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import time
 from .notes import config_from_mapping
 
 
@@ -140,14 +141,26 @@ def export_grids(conn, sujet_id, directory):
         (directory/f"grille_{grid['id']}.md").write_text('\n'.join(lines)+'\n', encoding='utf-8')
 
 
+def _retry_locked(operation):
+    """Give a short-lived file lock time to clear, without hiding lasting failures."""
+    for attempt, delay in enumerate((0, .2, .5, 1.0)):
+        if delay:
+            time.sleep(delay)
+        try:
+            return operation()
+        except PermissionError:
+            if attempt == 3:
+                raise
+
+
 def export_results(conn, result, output, pdf=False, combined=False):
     """Build in a fresh directory; never expose partial or stale exports as a success."""
     output = Path(output).resolve()
     if output.exists():
         raise ValueError(f'Le dossier de sortie existe déjà : {output} ; choisir un nouveau dossier')
-    output.parent.mkdir(parents=True, exist_ok=True)
-    stage = Path(tempfile.mkdtemp(prefix='.smartcorrection-', dir=output.parent))
     cfg = config_from_mapping(result['config'])
+    _retry_locked(lambda: output.parent.mkdir(parents=True, exist_ok=True))
+    stage = Path(_retry_locked(lambda: tempfile.mkdtemp(prefix='.smartcorrection-', dir=output.parent)))
     try:
         export_grids(conn, result['sujet']['id'], stage)
         students = [build_student_data(conn, result, row) for row in result['notes']]
@@ -181,9 +194,14 @@ def export_results(conn, result, output, pdf=False, combined=False):
         (stage/'manifest.json').write_text(json.dumps(manifest, indent=2)+'\n', encoding='utf-8')
         for path in stage.iterdir():
             if path.suffix in {'.aux','.log','.out'}:
-                path.unlink()
-        stage.rename(output)
-    except Exception:
-        shutil.rmtree(stage)
+                _retry_locked(path.unlink)
+        _retry_locked(lambda: stage.rename(output))
+    except Exception as exc:
+        try:
+            _retry_locked(lambda: shutil.rmtree(stage))
+        except OSError as cleanup_error:
+            # In particular, Windows may deny deletion of a file still open elsewhere.
+            # Keep the actual compilation/export error instead of replacing it with this one.
+            exc.add_note(f'Nettoyage temporaire impossible ({stage}) : {cleanup_error}')
         raise
     return output

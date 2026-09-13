@@ -282,6 +282,22 @@ class GuiWorkflowTests(unittest.TestCase):
             self.assertEqual(exc.exception.code, 403)
         req = urllib.request.Request(url+'/api/action', data=data, headers={'Content-Type': 'application/json', 'X-SmartCorrection-Token': token})
         self.assertIn('id', json.load(urllib.request.urlopen(req)))
+        from unittest.mock import patch
+        for action,error,reparable in (
+            ('generer', PermissionError('Dossier verrouillé'), False),
+            ('echange', PermissionError('Dossier verrouillé'), False),
+            ('echange', ValueError('JSON invalide'), True),
+        ):
+            with self.subTest(action=action,error=type(error).__name__):
+                data=json.dumps({'action':action,'dossier':self.ident,'etape':'grille','texte':'{}'}).encode()
+                req=urllib.request.Request(url+'/api/action',data=data,headers={'Content-Type':'application/json','X-SmartCorrection-Token':token})
+                with patch.object(self.app,'generate' if action=='generer' else 'exchange',side_effect=error):
+                    with self.assertRaises(urllib.error.HTTPError) as caught:
+                        urllib.request.urlopen(req)
+                message=json.load(caught.exception)
+                self.assertEqual(message['reponse_reparable'],reparable)
+                if isinstance(error,PermissionError):
+                    self.assertIn('pas dans ChatGPT',message['erreur'])
         self.assertEqual(urllib.request.urlopen(url+'/app.js').status, 200)
         with self.assertRaises(ValueError):
             self.app.file('rendu', 'unknown', '../../db.sqlite')

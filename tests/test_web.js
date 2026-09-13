@@ -116,3 +116,21 @@ test('JSON and LaTeX previews unwrap one code block without losing content', () 
   context.response = 'Avant\n```json\n{}\n```';
   assert.equal(run("responseBody(response,'grille')"), context.response);
 });
+
+test('format repair is only offered for response validation errors with complete context', async () => {
+  const h = harness();
+  h.node('#prompt').value = 'Consigne JSON';
+  h.node('#response').value = '{broken}';
+  h.context.fetch = async () => ({ok: false, json: async () => ({erreur: 'Accès refusé', reponse_reparable: false})});
+  await h.run("task(()=>post({action:'echange'}),{response:true})");
+  assert.doesNotMatch(h.node('#exchange-error').innerHTML, /repair-prompt/);
+  h.context.fetch = async () => ({ok: false, json: async () => ({erreur: 'JSON invalide', reponse_reparable: true})});
+  await h.run("task(()=>post({action:'echange'}),{response:true})");
+  assert.match(h.node('#exchange-error').innerHTML, /repair-prompt/);
+  h.node('#response').value = '';
+  await h.run("task(()=>post({action:'echange'}),{response:true})");
+  assert.doesNotMatch(h.node('#exchange-error').innerHTML, /repair-prompt/);
+  h.node('#exchange-error').innerHTML = '';
+  await h.run("task(()=>post({action:'generer'}))");
+  assert.equal(h.node('#exchange-error').innerHTML, '');
+});
