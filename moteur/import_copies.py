@@ -74,25 +74,29 @@ def _read_copies_csv(path) -> list[dict]:
         key = aliases.get(_header_key(original))
         if key and key not in columns:
             columns[key] = original
-    missing = {'numero', 'version', 'pages'} - set(columns)
+    missing = {'version', 'pages'} - set(columns)
     if missing:
-        raise ValueError('Le CSV doit contenir les colonnes numero, version et pages')
+        raise ValueError('Le CSV doit contenir les colonnes version et pages ; numero est facultatif')
 
     rows = []
     seen_numbers = set()
     for row_index, row in enumerate(reader, 2):
         if not any((value or '').strip() for value in row.values()):
             continue
-        raw_num = (row.get(columns['numero']) or '').strip()
-        try:
-            numero = int(raw_num)
-        except ValueError as exc:
-            raise ValueError(f'Ligne {row_index} : numero invalide') from exc
-        if numero <= 0:
-            raise ValueError(f'Ligne {row_index} : numero doit être strictement positif')
-        if numero in seen_numbers:
-            raise ValueError(f'Numéro répété dans le CSV : {numero}')
-        seen_numbers.add(numero)
+
+        numero = None
+        if 'numero' in columns:
+            raw_num = (row.get(columns['numero']) or '').strip()
+            if raw_num:
+                try:
+                    numero = int(raw_num)
+                except ValueError as exc:
+                    raise ValueError(f'Ligne {row_index} : numero invalide') from exc
+                if numero <= 0:
+                    raise ValueError(f'Ligne {row_index} : numero doit être strictement positif')
+                if numero in seen_numbers:
+                    raise ValueError(f'Numéro répété dans le CSV : {numero}')
+                seen_numbers.add(numero)
 
         version = (row.get(columns['version']) or '').strip()
         if not version:
@@ -105,10 +109,30 @@ def _read_copies_csv(path) -> list[dict]:
             raise ValueError(f'Ligne {row_index} : pages obligatoires pour une copie présente')
         if status == 'absent' and pages:
             raise ValueError(f'Ligne {row_index} : une absence ne doit pas avoir de pages')
+        if status == 'absent' and numero is None:
+            raise ValueError(f'Ligne {row_index} : une absence doit être rattachée à un élève')
         rows.append({'numero': numero, 'version': version, 'pages': pages, 'statut': status})
     if not rows:
         raise ValueError('Le CSV ne contient aucune copie')
     return rows
+
+
+def _pages_for_copy(conn, copy_id: int) -> list[int]:
+    return [r['page'] for r in conn.execute(
+        'SELECT page FROM copie_page WHERE copie_id=? ORDER BY ordre', (copy_id,)
+    )]
+
+
+def _anonymous_with_pages(conn, sujet_id: int, pdf: str, pages: list[int]):
+    if not pages:
+        return None
+    for candidate in conn.execute(
+        "SELECT * FROM copie WHERE sujet_id=? AND eleve_id IS NULL AND pdf_path=? AND statut='present' ORDER BY id",
+        (sujet_id, pdf),
+    ):
+        if _pages_for_copy(conn, candidate['id']) == pages:
+            return candidate
+    return None
 
 
 def import_copies_csv(path, sujet_id, pdf_path, db_path, replace=False):
@@ -118,7 +142,7 @@ def import_copies_csv(path, sujet_id, pdf_path, db_path, replace=False):
     if not pdf.is_file():
         raise ValueError(f'PDF introuvable : {pdf}')
 
-    inserted = updated = reused = absent = 0
+    inserted = updated = reused = absent = attributed = 0
     assigned_pages = 0
     with database(db_path) as conn:
         conn.execute('BEGIN IMMEDIATE')
@@ -134,42 +158,62 @@ def import_copies_csv(path, sujet_id, pdf_path, db_path, replace=False):
 
         for row in rows:
             numero = row['numero']
-            if numero not in pupils:
-                raise ValueError(f'Élève n°{numero} absent de la classe {subject["classe"]}')
+            desired_eleve = None
+            if numero is not None:
+                if numero not in pupils:
+                    raise ValueError(f'Élève n°{numero} absent de la classe {subject["classe"]}')
+                desired_eleve = pupils[numero]
             if row['version'] not in versions:
                 raise ValueError(f'Version inconnue pour le sujet {sujet_id} : {row["version"]}')
             status = row['statut']
             desired_pdf = str(pdf) if status == 'present' else ''
             desired_version = versions[row['version']]
-            existing = conn.execute(
-                'SELECT * FROM copie WHERE sujet_id=? AND eleve_id=?',
-                (sujet_id, pupils[numero]),
-            ).fetchone()
+
+            existing = None
+            if desired_eleve is not None:
+                existing = conn.execute(
+                    'SELECT * FROM copie WHERE sujet_id=? AND eleve_id=?',
+                    (sujet_id, desired_eleve),
+                ).fetchone()
+            if existing is None and status == 'present':
+                existing = _anonymous_with_pages(conn, sujet_id, desired_pdf, row['pages'])
 
             if existing:
-                current_pages = [r['page'] for r in conn.execute(
-                    'SELECT page FROM copie_page WHERE copie_id=? ORDER BY ordre', (existing['id'],)
-                )]
-                exact = (
+                current_pages = _pages_for_copy(conn, existing['id'])
+                same_content = (
                     existing['version_id'] == desired_version
                     and existing['pdf_path'] == desired_pdf
                     and existing['statut'] == status
                     and current_pages == row['pages']
                 )
-                if exact:
+                same_owner = existing['eleve_id'] == desired_eleve
+                if same_content and same_owner:
                     reused += 1
                     absent += int(status == 'absent')
                     assigned_pages += len(row['pages'])
                     continue
+
+                linking_anonymous = (
+                    same_content
+                    and existing['eleve_id'] is None
+                    and desired_eleve is not None
+                )
+                if linking_anonymous:
+                    conn.execute('UPDATE copie SET eleve_id=? WHERE id=?', (desired_eleve, existing['id']))
+                    attributed += 1
+                    assigned_pages += len(row['pages'])
+                    continue
+
                 if not replace:
+                    label = f'élève n°{numero}' if numero is not None else f'pages {row["pages"]}'
                     raise ValueError(
-                        f'Copie déjà associée pour l’élève n°{numero}; utiliser --replace avant toute correction'
+                        f'Copie déjà associée pour {label}; utiliser --replace avant toute correction'
                     )
                 if conn.execute('SELECT 1 FROM correction WHERE copie_id=?', (existing['id'],)).fetchone():
-                    raise ValueError(f'Copie n°{numero} déjà corrigée : association figée')
+                    raise ValueError('Copie déjà corrigée : version, PDF et pages sont figés')
                 conn.execute(
-                    'UPDATE copie SET version_id=?,pdf_path=?,statut=? WHERE id=?',
-                    (desired_version, desired_pdf, status, existing['id']),
+                    'UPDATE copie SET eleve_id=?,version_id=?,pdf_path=?,statut=? WHERE id=?',
+                    (desired_eleve, desired_version, desired_pdf, status, existing['id']),
                 )
                 conn.execute('DELETE FROM copie_page WHERE copie_id=?', (existing['id'],))
                 copy_id = existing['id']
@@ -177,7 +221,7 @@ def import_copies_csv(path, sujet_id, pdf_path, db_path, replace=False):
             else:
                 copy_id = conn.execute(
                     'INSERT INTO copie(eleve_id,sujet_id,version_id,pdf_path,statut) VALUES(?,?,?,?,?)',
-                    (pupils[numero], sujet_id, desired_version, desired_pdf, status),
+                    (desired_eleve, sujet_id, desired_version, desired_pdf, status),
                 ).lastrowid
                 inserted += 1
 
@@ -189,12 +233,18 @@ def import_copies_csv(path, sujet_id, pdf_path, db_path, replace=False):
             absent += int(status == 'absent')
             assigned_pages += len(row['pages'])
 
+        unassigned = conn.execute(
+            'SELECT COUNT(*) FROM copie WHERE sujet_id=? AND eleve_id IS NULL', (sujet_id,)
+        ).fetchone()[0]
+
     return {
         'sujet_id': sujet_id,
         'pdf': str(pdf),
         'copies_importees': inserted,
         'copies_mises_a_jour': updated,
+        'copies_attribuees': attributed,
         'deja_presentes': reused,
+        'copies_non_attribuees': unassigned,
         'absents': absent,
         'pages_assignees': assigned_pages,
     }
