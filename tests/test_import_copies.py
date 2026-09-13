@@ -8,6 +8,7 @@ from moteur.import_classe import import_classe_csv
 from moteur.import_copies import import_copies_csv, parse_pages
 from moteur.import_evaluation import import_evaluation
 from moteur.pipeline import ai_packet
+from moteur.calcul import calculate_notes
 
 
 EVALUATION = {
@@ -62,6 +63,7 @@ class SharedPdfCopyTests(unittest.TestCase):
         self.assertEqual(result['copies_importees'], 3)
         self.assertEqual(result['pages_assignees'], 3)
         self.assertEqual(result['absents'], 1)
+        self.assertEqual(result['copies_non_attribuees'], 0)
 
         with database(self.db) as conn:
             rows = conn.execute('SELECT * FROM copie ORDER BY eleve_id').fetchall()
@@ -80,6 +82,46 @@ class SharedPdfCopyTests(unittest.TestCase):
         repeat = import_copies_csv(mapping, self.sid, self.pdf, self.db)
         self.assertEqual(repeat['deja_presentes'], 3)
         self.assertEqual(repeat['copies_importees'], 0)
+
+    def test_anonymous_copy_can_be_imported_then_attributed(self):
+        anonymous = self.root / 'anonymous.csv'
+        anonymous.write_text(
+            'numero;version;pages\n'
+            ';B;7-8\n',
+            encoding='utf-8',
+        )
+        result = import_copies_csv(anonymous, self.sid, self.pdf, self.db)
+        self.assertEqual(result['copies_importees'], 1)
+        self.assertEqual(result['copies_non_attribuees'], 1)
+        with database(self.db) as conn:
+            copy = conn.execute('SELECT * FROM copie').fetchone()
+            self.assertIsNone(copy['eleve_id'])
+            packet = ai_packet(conn, copy['id'])
+            self.assertEqual(packet['source']['pages'], [7, 8])
+        with self.assertRaisesRegex(ValueError, 'non attribuée'):
+            calculate_notes(self.db, self.sid)
+
+        identified = self.root / 'identified.csv'
+        identified.write_text(
+            'numero;version;pages\n'
+            '2;B;7-8\n',
+            encoding='utf-8',
+        )
+        result = import_copies_csv(identified, self.sid, self.pdf, self.db)
+        self.assertEqual(result['copies_attribuees'], 1)
+        self.assertEqual(result['copies_non_attribuees'], 0)
+        with database(self.db) as conn:
+            copy = conn.execute('SELECT c.*,e.numero FROM copie c JOIN eleve e ON e.id=c.eleve_id').fetchone()
+            self.assertEqual(copy['numero'], 2)
+            self.assertEqual([r['page'] for r in conn.execute(
+                'SELECT page FROM copie_page WHERE copie_id=? ORDER BY ordre', (copy['id'],)
+            )], [7, 8])
+
+    def test_anonymous_absence_is_rejected(self):
+        mapping = self.root / 'bad-absence.csv'
+        mapping.write_text('numero;version;pages;statut\n;A;;absent\n', encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'absence doit être rattachée'):
+            import_copies_csv(mapping, self.sid, self.pdf, self.db)
 
     def test_same_source_page_cannot_belong_to_two_copies(self):
         mapping = self.root / 'bad.csv'
