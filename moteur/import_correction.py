@@ -96,6 +96,57 @@ def import_correction(data, conn, replace=False):
     return cid
 
 
+def import_corrections(data, conn, replace=False):
+    """Import exactly one correction for every present copy of one subject, atomically."""
+    object_fields(data, {'sujet_id', 'corrections'}, {'sujet_id', 'corrections'})
+    sujet_id = integer(data['sujet_id'], 'sujet_id')
+    if not conn.execute('SELECT 1 FROM sujet WHERE id=?', (sujet_id,)).fetchone():
+        raise ValueError(f'Sujet inconnu : {sujet_id}')
+
+    expected = {
+        row['id'] for row in conn.execute(
+            "SELECT id FROM copie WHERE sujet_id=? AND statut='present'", (sujet_id,)
+        )
+    }
+    if not expected:
+        raise ValueError('Aucune copie présente pour ce sujet')
+
+    corrections = array(data['corrections'], 'corrections', True)
+    seen = set()
+    for correction in corrections:
+        if not isinstance(correction, dict):
+            raise ValueError('Chaque correction du lot doit être un objet')
+        if 'copie_id' not in correction:
+            raise ValueError('copie_id manquant dans une correction du lot')
+        copy_id = integer(correction['copie_id'], 'copie_id')
+        if copy_id in seen:
+            raise ValueError(f'Copie répétée dans le lot : {copy_id}')
+        copy = conn.execute('SELECT sujet_id,statut FROM copie WHERE id=?', (copy_id,)).fetchone()
+        if not copy or copy['sujet_id'] != sujet_id or copy['statut'] != 'present':
+            raise ValueError(f'Copie {copy_id} extérieure au sujet ou absente')
+        seen.add(copy_id)
+
+    missing = sorted(expected - seen)
+    if missing:
+        raise ValueError(f'Corrections manquantes pour les copies : {missing}')
+    extra = sorted(seen - expected)
+    if extra:
+        raise ValueError(f'Corrections extérieures au lot : {extra}')
+
+    correction_ids = [import_correction(correction, conn, replace) for correction in corrections]
+    return {
+        'sujet_id': sujet_id,
+        'corrections_importees': len(correction_ids),
+        'correction_ids': correction_ids,
+    }
+
+
 def import_correction_json(path, db_path, replace=False):
     with database(db_path) as conn:
         return import_correction(load_json(path), conn, replace)
+
+
+def import_corrections_json(path, db_path, replace=False):
+    with database(db_path) as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        return import_corrections(load_json(path), conn, replace)
