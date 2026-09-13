@@ -5,6 +5,7 @@ from pathlib import Path
 import sqlite3
 import sys
 from .db import DEFAULT_DB, database, init_db
+from .import_classe import import_classe_csv
 from .import_correction import import_correction, import_correction_json, compatible_grid
 from .import_evaluation import import_evaluation, import_evaluation_json
 from .calcul import calculate, calculate_notes
@@ -69,14 +70,17 @@ def build_parser():
     parser = argparse.ArgumentParser(prog='smartcorrection')
     sub = parser.add_subparsers(dest='command', required=True)
     for name, help_text in (
-        ('init-db', 'Initialiser ou migrer SQLite'), ('import-evaluation', 'Importer une évaluation complète'),
+        ('init-db', 'Initialiser ou migrer SQLite'), ('import-classe', 'Importer une classe depuis un CSV'),
+        ('import-evaluation', 'Importer une évaluation complète'),
         ('import-correction', 'Importer une correction validée'), ('calculate', 'Calculer les notes depuis SQLite'),
         ('render', 'Recalculer puis exporter les fiches'), ('run', 'Exécuter un manifeste complet'),
         ('prepare-ai', 'Préparer le contexte et le squelette de réponse IA'), ('validate-grid', 'Valider une grille après revue')):
         p = sub.add_parser(name, help=help_text)
         p.add_argument('--db', default=str(DEFAULT_DB))
-        if name in {'import-evaluation', 'import-correction', 'run'}:
+        if name in {'import-classe', 'import-evaluation', 'import-correction', 'run'}:
             p.add_argument('file')
+        if name == 'import-classe':
+            p.add_argument('--classe', required=True)
         if name in {'import-correction','run'}:
             p.add_argument('--replace', action='store_true')
         if name in {'import-evaluation','run'}:
@@ -105,6 +109,8 @@ def main(argv=None):
         command = args.command
         if command == 'init-db':
             value = {'base': str(init_db(args.db))}
+        elif command == 'import-classe':
+            value = import_classe_csv(args.file, args.classe, args.db)
         elif command == 'import-evaluation':
             init_db(args.db)
             value = {'sujet_id': import_evaluation_json(args.file, args.db, args.check_pdfs)}
