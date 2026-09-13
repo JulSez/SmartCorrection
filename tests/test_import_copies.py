@@ -6,8 +6,9 @@ import unittest
 from moteur.db import database, init_db
 from moteur.import_classe import import_classe_csv
 from moteur.import_copies import import_copies_csv, parse_pages
+from moteur.import_correction import import_corrections
 from moteur.import_evaluation import import_evaluation
-from moteur.pipeline import ai_packet
+from moteur.pipeline import ai_packet, ai_batch_packet
 from moteur.calcul import calculate_notes
 
 
@@ -77,6 +78,7 @@ class SharedPdfCopyTests(unittest.TestCase):
             packet = ai_packet(conn, rows[0]['id'])
             self.assertEqual(packet['source']['pages'], [1, 2])
             self.assertEqual(packet['source']['pdf_path'], str(self.pdf.resolve()))
+            self.assertEqual(packet['eleve_numero'], 1)
             self.assertIn('PDF partagé', packet['consigne'])
 
         repeat = import_copies_csv(mapping, self.sid, self.pdf, self.db)
@@ -98,6 +100,7 @@ class SharedPdfCopyTests(unittest.TestCase):
             self.assertIsNone(copy['eleve_id'])
             packet = ai_packet(conn, copy['id'])
             self.assertEqual(packet['source']['pages'], [7, 8])
+            self.assertIsNone(packet['eleve_numero'])
         with self.assertRaisesRegex(ValueError, 'non attribuée'):
             calculate_notes(self.db, self.sid)
 
@@ -116,6 +119,90 @@ class SharedPdfCopyTests(unittest.TestCase):
             self.assertEqual([r['page'] for r in conn.execute(
                 'SELECT page FROM copie_page WHERE copie_id=? ORDER BY ordre', (copy['id'],)
             )], [7, 8])
+
+    def test_batch_prepare_and_atomic_import_include_anonymous_copies(self):
+        mapping = self.root / 'batch.csv'
+        mapping.write_text(
+            'numero;version;pages\n'
+            '1;A;1\n'
+            ';B;3\n',
+            encoding='utf-8',
+        )
+        import_copies_csv(mapping, self.sid, self.pdf, self.db)
+
+        with database(self.db) as conn:
+            batch = ai_batch_packet(conn, self.sid)
+            self.assertEqual(len(batch['copies']), 2)
+            self.assertEqual([c['source']['pages'] for c in batch['copies']], [[1], [3]])
+            self.assertEqual(batch['copies'][0]['eleve_numero'], 1)
+            self.assertIsNone(batch['copies'][1]['eleve_numero'])
+            self.assertEqual(len(batch['reponse_structure']['corrections']), 2)
+
+            corrections = {
+                'sujet_id': self.sid,
+                'corrections': [
+                    {
+                        'copie_id': c['copie_id'],
+                        'grille_id': c['grille_id'],
+                        'items': [{'item_code': 'I1', 'points_obtenus': 1}],
+                    }
+                    for c in batch['copies']
+                ],
+            }
+            result = import_corrections(corrections, conn)
+            self.assertEqual(result['corrections_importees'], 2)
+            self.assertEqual(conn.execute('SELECT COUNT(*) FROM correction').fetchone()[0], 2)
+
+    def test_batch_import_rolls_back_when_one_correction_is_invalid(self):
+        mapping = self.root / 'batch-bad.csv'
+        mapping.write_text(
+            'numero;version;pages\n'
+            '1;A;1\n'
+            '2;B;3\n',
+            encoding='utf-8',
+        )
+        import_copies_csv(mapping, self.sid, self.pdf, self.db)
+
+        with database(self.db) as conn:
+            batch = ai_batch_packet(conn, self.sid)
+        data = {
+            'sujet_id': self.sid,
+            'corrections': [
+                {
+                    'copie_id': batch['copies'][0]['copie_id'],
+                    'grille_id': batch['copies'][0]['grille_id'],
+                    'items': [{'item_code': 'I1', 'points_obtenus': 1}],
+                },
+                {
+                    'copie_id': batch['copies'][1]['copie_id'],
+                    'grille_id': batch['copies'][1]['grille_id'],
+                    'items': [{'item_code': 'I1', 'points_obtenus': 2}],
+                },
+            ],
+        }
+        with self.assertRaisesRegex(ValueError, 'Points supérieurs'):
+            with database(self.db) as conn:
+                conn.execute('BEGIN IMMEDIATE')
+                import_corrections(data, conn)
+        with database(self.db) as conn:
+            self.assertEqual(conn.execute('SELECT COUNT(*) FROM correction').fetchone()[0], 0)
+
+    def test_batch_import_requires_every_present_copy(self):
+        mapping = self.root / 'batch-missing.csv'
+        mapping.write_text('numero;version;pages\n1;A;1\n2;B;3\n', encoding='utf-8')
+        import_copies_csv(mapping, self.sid, self.pdf, self.db)
+        with database(self.db) as conn:
+            batch = ai_batch_packet(conn, self.sid)
+            data = {
+                'sujet_id': self.sid,
+                'corrections': [{
+                    'copie_id': batch['copies'][0]['copie_id'],
+                    'grille_id': batch['copies'][0]['grille_id'],
+                    'items': [{'item_code': 'I1', 'points_obtenus': 1}],
+                }],
+            }
+            with self.assertRaisesRegex(ValueError, 'Corrections manquantes'):
+                import_corrections(data, conn)
 
     def test_anonymous_absence_is_rejected(self):
         mapping = self.root / 'bad-absence.csv'
