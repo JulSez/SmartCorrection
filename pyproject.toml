@@ -21,3 +21,4 @@ moteur = ["schema.sql", "gui_schema.sql", "web/*"]
 
 [project.optional-dependencies]
 gui = ["pypdf>=4"]
+pdf = ["pypdf>=4"]

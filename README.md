@@ -1,7 +1,7 @@
 # SmartCorrection
 
 Moteur **local**, Python 3.11+ et SQLite, sans appel IA pour les imports, les calculs ou les exports.
-Le moteur CLI est sans dépendance Python externe ; l’interface utilise aussi `pypdf`. L'IA propose le barème et interprète les copies ;
+Les calculs et imports CLI sont sans dépendance Python externe ; l’interface et les exports PDF utilisent `pypdf`. L'IA propose le barème et interprète les copies ;
 l'enseignant valide la grille, et Python calcule les notes à partir de chaque item.
 
 ## Interface graphique
@@ -20,6 +20,9 @@ puis produit les fiches du paquet entier. Les consignes générales et de classe
 avec ChatGPT en fin de correction et conservées dans SQLite pour les prochains dossiers.
 
 **LaTeX reste le moteur de rendu mathématique.** `pypdf` compte les pages et assemble les PDF.
+Les fiches sont en A5 paysage : correction, note et conseils à gauche ; corrigé à droite,
+dans deux zones A6 portrait avec des accents bleus. Les contenus longs continuent sur les
+feuilles suivantes en conservant leur côté.
 Cette première interface utilise une notation individuelle sur 20, sans groupe.
 
 [Installation, parcours et formats des réponses ChatGPT](docs/interface.md)
@@ -36,7 +39,8 @@ python -m moteur run examples/tmex_demo/pipeline.json --db db/demo.sqlite --outp
 
 Produit `notes.json`, `notes.csv`, un `.tex` par élève, les grilles en Markdown et un manifeste SHA-256 des sorties.
 Pour compiler aussi les PDF, ajouter `--pdf` (TeX Live : LaTeX, AMS, Latin Modern,
-Geometry, Longtable ; français recommandé). Le français est utilisé si `french.ldf` est installé.
+Geometry, Longtable, xcolor/colortbl ; français recommandé), avec `python -m pip install ".[pdf]"`
+si l’interface n’est pas installée. Le français est utilisé si `french.ldf` est installé.
 Pour une installation Python : `python -m pip install .`, puis la commande `smartcorrection`
 est disponible hors du dépôt ; le schéma SQL est inclus dans le paquet.
 

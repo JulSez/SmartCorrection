@@ -1,21 +1,82 @@
 """Render only: every displayed score is supplied by calcul.py."""
 import csv
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
 import time
+import unicodedata
 from .notes import config_from_mapping
 
 
-def tex_escape(value):
+_MATH_SYMBOLS = {
+    '×': r'\times', '÷': r'\div', '·': r'\cdot', '⋅': r'\cdot',
+    '√': r'\sqrt{\phantom{x}}', '≤': r'\leq', '≥': r'\geq', '≠': r'\neq',
+    '→': r'\rightarrow', '←': r'\leftarrow', '↔': r'\leftrightarrow',
+    '⇒': r'\Rightarrow', '⇐': r'\Leftarrow', '⇔': r'\Leftrightarrow',
+    '∞': r'\infty', '±': r'\pm', '∓': r'\mp', '≈': r'\approx', '≃': r'\simeq',
+    '≡': r'\equiv', '∈': r'\in', '∉': r'\notin', '∅': r'\varnothing',
+    '∪': r'\cup', '∩': r'\cap', '⊂': r'\subset', '⊆': r'\subseteq',
+    '⊃': r'\supset', '⊇': r'\supseteq', '∀': r'\forall', '∃': r'\exists',
+    '∑': r'\sum', '∏': r'\prod', '∫': r'\int', '∂': r'\partial',
+    '∇': r'\nabla', '⊥': r'\perp', '∥': r'\parallel', '¬': r'\neg',
+    '∧': r'\wedge', '∨': r'\vee', 'ℝ': r'\mathbb{R}', 'ℕ': r'\mathbb{N}',
+    'ℤ': r'\mathbb{Z}', 'ℚ': r'\mathbb{Q}', 'ℂ': r'\mathbb{C}',
+    'α': r'\alpha', 'β': r'\beta', 'γ': r'\gamma', 'δ': r'\delta',
+    'ε': r'\varepsilon', 'θ': r'\theta', 'λ': r'\lambda', 'μ': r'\mu',
+    'µ': r'\mu', 'π': r'\pi', 'ρ': r'\rho', 'σ': r'\sigma', 'τ': r'\tau',
+    'φ': r'\varphi', 'ω': r'\omega', 'Δ': r'\Delta', 'Σ': r'\Sigma',
+    'Π': r'\Pi', 'Ω': r'\Omega', '°': r'{}^{\circ}',
+    '½': r'\frac{1}{2}', '¼': r'\frac{1}{4}', '¾': r'\frac{3}{4}',
+}
+_UNICODE_TEXT = {
+    '−': '-', '‐': '-', '‑': '-', '–': '--', '—': '---',
+    '‘': "'", '’': "'", '“': '``', '”': "''", '…': r'\ldots{}',
+    '\u00a0': '~', '\u202f': '~', '\u2009': r'\,', '\u200b': '', '\ufeff': '',
+    '«': r'\guillemotleft{}', '»': r'\guillemotright{}',
+    '€': r'\texteuro{}', '£': r'\pounds{}',
+}
+_UNICODE_TEXT.update({c: r'\textsuperscript{'+n+'}' for c, n in zip('⁰¹²³⁴⁵⁶⁷⁸⁹', '0123456789')})
+_UNICODE_TEXT.update({c: r'\(_{'+n+r'}\)' for c, n in zip('₀₁₂₃₄₅₆₇₈₉', '0123456789')})
+
+
+def latex_escape_plain_text(value):
+    """Escape untrusted prose, then emit pdflatex-safe Unicode equivalents.
+
+    Never call this on an explicitly authored LaTeX fragment. The original text
+    stays in SQLite/JSON; an unknown glyph is printed as its Unicode code point.
+    """
     replacements = {'\\': r'\textbackslash{}', '&': r'\&', '%': r'\%', '$': r'\$',
                     '#': r'\#', '_': r'\_', '{': r'\{', '}': r'\}', '~': r'\textasciitilde{}',
                     '^': r'\textasciicircum{}', '\n': r'\newline{}'}
-    return ''.join(replacements.get(c, c) for c in str(value or ''))
+    text = unicodedata.normalize('NFC', '' if value is None else str(value))
+    text = text.replace('\r\n', '\n').replace('\r', '\n')
+    escaped = ''.join(replacements.get(c, c) for c in text)
+    result = []
+    for char in escaped:
+        if char in _MATH_SYMBOLS:
+            result.append(r'\('+_MATH_SYMBOLS[char]+r'\)')
+        elif char in _UNICODE_TEXT:
+            result.append(_UNICODE_TEXT[char])
+        elif ord(char) < 128:
+            result.append(char if char.isprintable() else ' ')
+        elif (0xC0 <= ord(char) <= 0xFF and unicodedata.category(char).startswith('L')) or char in 'œŒŸ':
+            result.append(char)
+        elif 0x1D400 <= ord(char) <= 0x1D7FF and unicodedata.normalize('NFKC', char).isascii():
+            result.append(unicodedata.normalize('NFKC', char))
+        else:
+            result.append(r'\texttt{[U+'+format(ord(char), '04X')+']}')
+    return ''.join(result)
+
+
+def tex_escape(value):
+    """Compatibility name for the shared plain-text conversion."""
+    return latex_escape_plain_text(value)
 
 
 def fmt(value):
@@ -49,38 +110,56 @@ def build_student_data(conn, result, row):
 
 
 def render_student(student, subject, cfg):
-    esc = tex_escape
+    """Typeset independent A6 streams; compile_pdf pairs them onto A5 sheets."""
+    esc = latex_escape_plain_text
     individual_only = cfg.groupe_mode == 'aucun' or cfg.note_groupe_max == 0
-    lines = [r'\documentclass[11pt,a4paper]{article}', r'\usepackage[utf8]{inputenc}',
-             r'\usepackage[T1]{fontenc}', r'\usepackage{lmodern}', r'\IfFileExists{french.ldf}{\usepackage[french]{babel}}{}', r'\usepackage{amsmath,amssymb,longtable,array}',
-             r'\usepackage[margin=18mm]{geometry}', r'\setlength{\parindent}{0pt}', r'\setlength{\parskip}{5pt}',
-             r'\begin{document}', r'{\Large\bfseries '+esc(subject.get('titre') or 'Évaluation')+r'}\par',
-             esc(f"{subject['classe']} - {student.get('label') or ('Élève n° ' + str(student['numero']))} - Version {student['version'] or '?'}"),
-             r'\par\vspace{4mm}\renewcommand{\arraystretch}{1.5}']
-    if individual_only:
-        lines += [r'\begin{tabular}{|p{.40\linewidth}|}\hline',
-                  f"Note (/{fmt(cfg.note_finale_max)})"+r'\\\hline',
-                  fmt(student['note_finale'])+r'\\\hline',
-                  r'\end{tabular}']
-    else:
+    label = student.get('label') or ('n° '+str(student['numero']))
+    if label.startswith('Élève n° '):
+        label = label.removeprefix('Élève ')
+    lines = ['% SmartCorrection: paired-a6-v1',
+             r'\documentclass[10pt]{article}', r'\usepackage[utf8]{inputenc}',
+             r'\usepackage[T1]{fontenc}', r'\usepackage{lmodern,textcomp}', r'\IfFileExists{french.ldf}{\usepackage[french]{babel}}{}', r'\usepackage{amsmath,amssymb,longtable,array}',
+             r'\usepackage[table]{xcolor}',
+             r'\usepackage[paperwidth=105mm,paperheight=148mm,margin=6mm,bottom=9mm,footskip=4mm]{geometry}',
+             r'\definecolor{SCblue}{HTML}{245A81}', r'\definecolor{SCpale}{HTML}{EAF2F8}',
+             r'\definecolor{SCline}{HTML}{CBDCE9}',
+             r'\setlength{\parindent}{0pt}\setlength{\parskip}{3pt}',
+             r'\setlength{\tabcolsep}{2.5pt}\setlength{\emergencystretch}{1em}',
+             r'\renewcommand{\normalsize}{\fontsize{8.5}{10.5}\selectfont}',
+             r'\renewcommand{\small}{\fontsize{7.5}{9}\selectfont}',
+             r'\makeatletter',
+             r'\renewcommand{\section}{\@startsection{section}{1}{0pt}{6pt}{3pt}{\color{SCblue}\bfseries\normalsize}}',
+             r'\renewcommand{\subsection}{\@startsection{subsection}{2}{0pt}{5pt}{2pt}{\color{SCblue}\bfseries\normalsize}}',
+             r'\def\SCpanel{Correction}',
+             r'\def\@oddfoot{\hfil{\small\color{SCblue}\SCpanel\enspace\textbullet\enspace\thepage}\hfil}',
+             r'\let\@evenfoot\@oddfoot\def\@oddhead{}\def\@evenhead{}',
+             r'\makeatother',
+             r'\newcommand{\SCtitle}[1]{{\fontsize{15}{17}\selectfont\bfseries\color{SCblue}\strut#1}\par\vspace{1mm}{\color{SCblue}\hrule height .7pt}\vspace{2mm}}',
+             r'\begin{document}\normalsize',
+             r'\setlength{\abovedisplayskip}{4pt}\setlength{\belowdisplayskip}{4pt}\allowdisplaybreaks',
+             r'\SCtitle{Correction}',
+             r'{\bfseries '+esc(subject.get('titre') or 'Évaluation')+r'}\par',
+             r'\textbf{Version :} '+esc(student['version'] or '?')+r'\hfill\textbf{Classe :} '+esc(subject['classe'])+r'\par',
+             r'\textbf{Élève :} '+esc(label)+r'\par\vspace{2mm}',
+             r'\renewcommand{\arraystretch}{1.4}\arrayrulecolor{SCline}',
+             r'\begin{tabular}{|m{.55\linewidth}|>{\centering\arraybackslash}m{\dimexpr.45\linewidth-4\tabcolsep-3\arrayrulewidth\relax}|}\hline',
+             r'\rowcolor{SCpale}\textbf{'+f'Note (/{fmt(cfg.note_finale_max)})'+r'} & \textcolor{SCblue}{\textbf{'+fmt(student['note_finale'])+r'}}\\\hline',
+             r'\end{tabular}\par']
+    if not individual_only:
         peers = '; '.join(f"n° {p['numero']} : {fmt(p['note_individuelle'])}" + (' (absent)' if p['statut']=='absent' else '') for p in student['camarades']) or 'Aucun camarade'
-        lines += [r'\begin{tabular}{|p{.28\linewidth}|p{.36\linewidth}|p{.23\linewidth}|}\hline',
-                  f"Note interro (/{fmt(cfg.note_individuelle_max)}) & Note groupe (/{fmt(cfg.note_groupe_max)}) & Note finale (/{fmt(cfg.note_finale_max)})"+r'\\\hline',
-                  f"{fmt(student['note_individuelle'])} & {fmt(student['note_groupe'])}" +
-                  r'\newline{\scriptsize '+esc(peers+f' (/{fmt(cfg.note_individuelle_max)})')+r'} & '+fmt(student['note_finale'])+r'\\\hline',
-                  r'\end{tabular}']
+        lines += [r'{\small '+esc(f"Note interro : {fmt(student['note_individuelle'])}/{fmt(cfg.note_individuelle_max)} ; Note groupe : {fmt(student['note_groupe'])}/{fmt(cfg.note_groupe_max)}.")+r'\par',
+                  esc(peers+f' (/{fmt(cfg.note_individuelle_max)})')+r'\par}']
     if student['statut'] == 'absent':
         lines += [r'\par\textbf{Absence déclarée.}']
     else:
-        lines += [r'\section*{Bilan par item}', r'\renewcommand{\arraystretch}{1.15}',
-                  r'\begin{longtable}{p{.17\linewidth}p{.60\linewidth}r}',
-                  r'\textbf{Item} & \textbf{Critère et retour} & \textbf{Points}\\\hline\endhead']
+        lines += [r'\section*{Correction}', r'\renewcommand{\arraystretch}{1.18}',
+                  r'\setlength{\LTpre}{0pt}\setlength{\LTpost}{3pt}',
+                  r'\begin{longtable}{@{}>{\raggedright\arraybackslash}p{.14\linewidth}>{\raggedright\arraybackslash}p{.34\linewidth}>{\centering\arraybackslash}p{.13\linewidth}>{\raggedright\arraybackslash}p{\dimexpr.39\linewidth-6\tabcolsep\relax}@{}}',
+                  r'\rowcolor{SCpale}\small\textbf{Question} & \small\textbf{Description du critère} & \small\textbf{Note} & \small\textbf{Retour}\\\hline\endhead']
         for item in student['items']:
-            detail = esc(item['description'])
-            for key in ('annotation', 'commentaire'):
-                if item[key]:
-                    detail += r'\newline{\small '+esc(item[key])+'}'
-            lines.append(esc(item['code'])+' & '+detail+' & '+fmt(item['points_obtenus'])+'/'+fmt(item['bareme_max'])+r'\\')
+            question = esc('Ex. '+str(item.get('exercice', '?')))+r'\newline '+esc('Q. '+str(item.get('question', '?')))
+            feedback = [esc(item[key]) for key in ('commentaire', 'annotation') if item.get(key)]
+            lines.append(question+' & '+esc(item['description'])+' & '+fmt(item['points_obtenus'])+'/'+fmt(item['bareme_max'])+' & '+r'\newline '.join(feedback)+r'\\\hline')
         lines += [r'\end{longtable}']
         if student['commentaire_global']:
             lines += [esc(student['commentaire_global'])]
@@ -89,12 +168,18 @@ def render_student(student, subject, cfg):
         for a in student['annotations']:
             lines += [r'\item '+esc(f"Page {a['page']} - {a['item_code']} : {a['texte']}")]
         lines += [r'\end{itemize}']
+    lines += [r'\section*{Conseils}']
     if student['conseils']:
-        lines += [r'\section*{Conseils}', r'\begin{itemize}']
+        lines += [r'\begin{itemize}\setlength{\itemsep}{1pt}\setlength{\parskip}{0pt}']
         lines += [r'\item '+esc(a['texte']) for a in student['conseils']]
         lines += [r'\end{itemize}']
-    if student['corrige_latex']:
-        lines += [r'\section*{Corrigé}', student['corrige_latex']]
+    else:
+        lines += ['Aucun conseil enregistré.']
+    lines += [r'\label{sc-correction-end}\clearpage',
+              r'\def\SCpanel{Corrigé}\setcounter{page}{1}', r'\SCtitle{Corrigé}',
+              r'{\bfseries '+esc(subject.get('titre') or 'Évaluation')+r'}\par',
+              r'\textbf{Version :} '+esc(student['version'] or '?')+r'\hfill\textbf{Classe :} '+esc(subject['classe'])+r'\par\vspace{2mm}',
+              student['corrige_latex'] or 'Aucun corrigé enregistré pour cette version.']
     lines += [r'\end{document}', '']
     return '\n'.join(lines)
 
@@ -104,19 +189,60 @@ def compile_pdf(tex_path, timeout=60):
     if not engine:
         raise RuntimeError('pdflatex introuvable ; installer TeX Live avec le français ou omettre --pdf')
     tex_path = Path(tex_path).resolve()
+    paired = tex_path.read_text(encoding='utf-8').startswith('% SmartCorrection: paired-a6-v1\n')
+    # Never let the LaTeX output and the imposed PDF share a filename.
+    jobname = tex_path.stem + '.a6' if paired else tex_path.stem
     env = dict(os.environ, openin_any='p', openout_any='p')
     for _ in range(2):
         try:
-            run = subprocess.run([engine, '-no-shell-escape', '-interaction=nonstopmode', '-halt-on-error', tex_path.name],
+            run = subprocess.run([engine, '-no-shell-escape', '-interaction=nonstopmode', '-halt-on-error', '-jobname='+jobname, tex_path.name],
                                  cwd=tex_path.parent, env=env, capture_output=True, text=True, timeout=timeout)
         except subprocess.TimeoutExpired as exc:
             raise RuntimeError(f'Compilation trop longue : {tex_path.name}') from exc
         if run.returncode:
             raise RuntimeError(f'Compilation échouée : {tex_path.name}\n{run.stdout[-2500:]}')
-    pdf = tex_path.with_suffix('.pdf')
-    if not pdf.is_file():
+    compiled = tex_path.parent/(jobname+'.pdf')
+    if not compiled.is_file():
         raise RuntimeError('Aucun PDF produit')
+    pdf = tex_path.with_suffix('.pdf')
+    if paired:
+        aux = (tex_path.parent/(jobname+'.aux')).read_text(encoding='utf-8')
+        boundary = re.search(r'\\newlabel\{sc-correction-end\}\{\{\}\{(\d+)\}', aux)
+        if not boundary:
+            raise RuntimeError('Repère de pagination correction/corrigé absent')
+        _pair_a6_pages(compiled, int(boundary.group(1)), pdf)
+        _retry_locked(compiled.unlink)
     return pdf
+
+
+def _pair_a6_pages(pdf_path, left_count, output_path):
+    """Keep each stream on its own side, without shrinking or dropping pages."""
+    try:
+        from pypdf import PdfReader, PdfWriter, Transformation
+    except ImportError as exc:
+        raise RuntimeError('Installer SmartCorrection avec les dépendances PDF : python -m pip install ".[pdf]"') from exc
+    reader = PdfReader(io.BytesIO(Path(pdf_path).read_bytes()))
+    if not 0 < left_count < len(reader.pages):
+        raise RuntimeError('Pagination correction/corrigé incohérente')
+    width, height = 105 * 72 / 25.4, 148 * 72 / 25.4
+    for page in reader.pages:
+        if abs(float(page.mediabox.width)-width) > .1 or abs(float(page.mediabox.height)-height) > .1:
+            raise RuntimeError('Le corrigé a modifié le format A6 attendu')
+    writer = PdfWriter()
+    try:
+        left, right = reader.pages[:left_count], reader.pages[left_count:]
+        for i in range(max(len(left), len(right))):
+            sheet = writer.add_blank_page(width=2*width, height=height)
+            if i < len(left):
+                sheet.merge_page(left[i])
+            if i < len(right):
+                sheet.merge_transformed_page(right[i], Transformation().translate(tx=width))
+        writer.add_metadata({'/Title': 'SmartCorrection - Correction et corrigé', '/Creator': 'SmartCorrection / LaTeX'})
+        output = io.BytesIO()
+        writer.write(output)
+        Path(output_path).write_bytes(output.getvalue())
+    finally:
+        writer.close()
 
 
 def export_grids(conn, sujet_id, directory):
@@ -174,26 +300,28 @@ def export_results(conn, result, output, pdf=False, combined=False):
                 row = {k: student[k] for k in fields}
                 row['camarades'] = ' | '.join(f"{p['numero']}: {fmt(p['note_individuelle'])}" for p in student['camarades'])
                 writer.writerow(row)
+        pdf_paths = []
         for student in students:
             name = f"eleve_{student['numero']:03d}" if student['numero'] is not None else f"copie_{student['copie_id']:04d}"
             path = stage/f"{name}.tex"
             path.write_text(render_student(student, result['sujet'], cfg), encoding='utf-8')
             if pdf:
-                compile_pdf(path)
+                pdf_paths.append(compile_pdf(path))
         if pdf and combined:
             from pypdf import PdfWriter
             writer = PdfWriter()
             try:
-                for path in sorted(stage.glob('*.pdf')):
+                # Only publish final student PDFs, never an intermediate A6 document.
+                for path in sorted(pdf_paths):
                     writer.append(str(path))
                 writer.write(str(stage/'corrections.pdf'))
             finally:
                 writer.close()
         manifest = {'format_version': 1, 'sujet_id': result['sujet']['id'], 'pdf': pdf,
-                    'files': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(stage.iterdir()) if p.suffix in {'.json','.csv','.tex','.pdf','.md'}}}
+                    'files': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(stage.iterdir()) if p.suffix in {'.json','.csv','.tex','.pdf','.md'} and not p.name.endswith('.a6.pdf')}}
         (stage/'manifest.json').write_text(json.dumps(manifest, indent=2)+'\n', encoding='utf-8')
         for path in stage.iterdir():
-            if path.suffix in {'.aux','.log','.out'}:
+            if path.suffix in {'.aux','.log','.out'} or path.name.endswith('.a6.pdf'):
                 _retry_locked(path.unlink)
         _retry_locked(lambda: stage.rename(output))
     except Exception as exc:

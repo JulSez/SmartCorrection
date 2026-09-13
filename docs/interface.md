@@ -20,6 +20,21 @@ AMS, Geometry, Longtable et Latin Modern. Babel français est recommandé.
 `pypdf` compte les pages des sources et assemble les PDF produits par LaTeX ; il ne compose
 pas les formules. Sans LaTeX, les imports et les exports de sources `.tex` restent utilisables.
 
+Les fiches sont en **A5 paysage**, divisées en deux zones **A6 portrait**. À gauche figurent
+le sujet, la version, la classe et l'élève, puis la note (une ligne, deux colonnes), le tableau
+**Question / Description du critère / Note / Retour** et les conseils. À droite figure le corrigé
+intégral. Les titres sont bleus et les en-têtes de tableaux bleu clair. Un contenu long continue
+du même côté sur les feuilles suivantes. Imprimer à taille réelle, sans agrandissement.
+Les noms restent locaux : les afficher sur les fiches ne les ajoute pas aux consignes ChatGPT.
+
+Exemple fictif du rendu (aucune donnée d'élève réelle) :
+
+![Fiche A5 paysage, correction à gauche et corrigé à droite](images/fiche-a5.png)
+
+L’aperçu PDF intégré autorise uniquement une page de la même origine locale à l’afficher.
+Les pages de l’application restent interdites d’intégration ; les origines externes restent
+bloquées. Si le lecteur PDF du navigateur est désactivé, utiliser « Ouvrir dans un onglet ».
+
 Options :
 
 ```sh
@@ -96,6 +111,13 @@ de réparation de format est réservée aux validations de réponses, avec une c
 réponse non vides ; elle n’apparaît plus pour les erreurs de génération ou d’accès aux fichiers.
 
 ## Format à demander à ChatGPT
+
+Le bouton « Je valide l’échantillon » a été supprimé : passer de **Tester la correction** à
+**Corriger le reste**, avec « Étape suivante » ou le menu latéral, valide l’échantillon avant
+de changer d’écran. Si une copie manque, reste à revoir ou si la sélection n’est pas enregistrée,
+le serveur refuse la validation et l’application reste sur l’écran actuel avec l’explication.
+Revenir à une étape précédente ne valide rien. Les validations du JSON et des consignes
+pédagogiques restent explicites.
 
 La consigne s’affiche automatiquement à l’ouverture de chaque étape. Cliquer sur
 « Copier la consigne pour ChatGPT », puis l’envoyer dans la conversation ChatGPT. Coller ensuite
