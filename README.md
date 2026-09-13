@@ -56,23 +56,60 @@ refusé sans modification partielle.
 Une évaluation de la même classe peut ensuite référencer directement ces numéros dans `copies`
 ou `groupes`, sans recopier les noms dans `evaluation.json`.
 
-## Utilisation sur une vraie évaluation
+## Associer un gros PDF de copies sans le découper
 
-1. Importer éventuellement la classe depuis un CSV local, puis préparer `classes/<classe>.md`,
-   les savoir-faire et le JSON d'évaluation suivant [le contrat](docs/evaluation_format.md).
-   Les chemins des copies sont relatifs au JSON.
-2. Relire la grille ; inscrire `validee: true` seulement après cette revue, ou la valider en CLI.
-3. Importer l'évaluation et les copies, puis préparer le contexte à transmettre à l'IA :
+SmartCorrection peut conserver **un seul PDF source pour toute l'évaluation**. Chaque copie
+logique reste rattachée à un élève, mais ne crée aucun fichier PDF individuel : elle référence
+simplement une ou plusieurs pages du PDF source.
+
+Exemple `private/copies.csv` :
+
+```csv
+numero;version;pages;statut
+1;A;1;present
+2;B;2;present
+3;A;3-4;present
+4;B;;absent
+```
+
+Puis :
 
 ```sh
-python -m moteur import-evaluation evaluation.json --db db/classe.sqlite --check-pdfs
+smartcorrection import-copies private/copies.csv --sujet 1 --pdf private/copies.pdf --db db/1gspe.sqlite
+```
+
+`pages` accepte un numéro, une plage (`3-5`) ou plusieurs valeurs (`1,3-5`, à citer si le CSV
+utilise la virgule comme séparateur). Une même page d'un même PDF ne peut pas être affectée à
+deux copies. Un nouvel import identique est idempotent. Avant correction, `--replace` permet de
+corriger une association ; après correction, l'identité de la copie, le PDF et ses pages sont figés.
+
+`prepare-ai` renvoie ensuite `source.pdf_path` et `source.pages`. Pour une copie issue d'un PDF
+partagé, les annotations utilisent les numéros de page du PDF source.
+
+## Utilisation sur une vraie évaluation
+
+1. Importer la classe depuis un CSV local, puis préparer `classes/<classe>.md`, les savoir-faire
+   et le JSON d'évaluation suivant [le contrat](docs/evaluation_format.md). Le JSON peut ne contenir
+   encore aucune copie.
+2. Relire la grille ; inscrire `validee: true` seulement après cette revue, ou la valider en CLI.
+3. Importer l'évaluation, puis associer les élèves aux pages du PDF source :
+
+```sh
+python -m moteur import-evaluation evaluation.json --db db/classe.sqlite
+python -m moteur import-copies private/copies.csv --sujet 1 --pdf private/copies.pdf --db db/classe.sqlite
 python -m moteur validate-grid --db db/classe.sqlite --grille 1
+```
+
+4. Préparer le contexte à transmettre à l'IA :
+
+```sh
 python -m moteur prepare-ai --db db/classe.sqlite --copie 1 --classe-md classes/TMEX.md --savoir-faire savoir-faire/equations.md > contexte.json
 ```
 
-4. Fournir à l'IA le contexte **et le PDF de la copie**. Lui demander le
-   [JSON de correction](docs/correction_format.md), sans total ni note finale.
-   Une copie illisible doit être revue avant import ; ne pas inventer des points.
+Fournir à l'IA le contexte **et le PDF source**. Pour un PDF partagé, elle ne lit que les pages
+indiquées dans `source.pages`. Lui demander le [JSON de correction](docs/correction_format.md),
+sans total ni note finale. Une copie illisible doit être revue avant import ; ne pas inventer des points.
+
 5. Importer chaque réponse, calculer et exporter :
 
 ```sh
@@ -87,7 +124,7 @@ pour un lot complet. `python -m moteur --help` liste les commandes.
 
 ## Responsabilités et état
 
-- **SQLite** : sujet, versions, corrigés, grilles, items, copies, corrections, annotations, conseils et groupes normalisés.
+- **SQLite** : sujet, versions, corrigés, grilles, items, copies logiques, pages de PDF, corrections, annotations, conseils et groupes normalisés.
 - **Markdown** : mémoire par classe et grilles lisibles ; aucune modification automatique des règles pédagogiques.
 - **Python** : validation stricte, transactions, calcul configurable, orchestration, exports et contexte IA.
 - **LaTeX** : rendu des notes, bilan par item, annotations, conseils et corrigé de la version.
