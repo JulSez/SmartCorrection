@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB = Path('db/smartcorrection.sqlite')
 SCHEMA = Path(__file__).with_name('schema.sql')
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 V3_SCHEMA = r'''
 CREATE TABLE IF NOT EXISTS copie_page (
@@ -60,6 +60,65 @@ WHEN NEW.pdf_path IS NOT OLD.pdf_path AND EXISTS(SELECT 1 FROM correction WHERE 
 BEGIN SELECT RAISE(ABORT, 'PDF de copie déjà corrigée'); END;
 '''
 
+V4_SCHEMA = r'''
+DROP INDEX IF EXISTS copie_unique;
+DROP TRIGGER IF EXISTS validate_copie_insert;
+DROP TRIGGER IF EXISTS validate_copie_update;
+DROP TRIGGER IF EXISTS freeze_copy_identity;
+DROP TRIGGER IF EXISTS freeze_copy_pdf;
+
+CREATE TABLE copie_v4 (
+    id INTEGER PRIMARY KEY,
+    eleve_id INTEGER REFERENCES eleve(id),
+    sujet_id INTEGER NOT NULL REFERENCES sujet(id),
+    version_id INTEGER REFERENCES version(id),
+    pdf_path TEXT NOT NULL,
+    statut TEXT NOT NULL DEFAULT 'present' CHECK(statut IN ('present', 'absent'))
+);
+INSERT INTO copie_v4(id,eleve_id,sujet_id,version_id,pdf_path,statut)
+SELECT id,eleve_id,sujet_id,version_id,pdf_path,statut FROM copie;
+DROP TABLE copie;
+ALTER TABLE copie_v4 RENAME TO copie;
+
+CREATE UNIQUE INDEX copie_unique ON copie(sujet_id, eleve_id);
+
+CREATE TRIGGER validate_copie_insert BEFORE INSERT ON copie
+WHEN NEW.statut NOT IN ('present','absent')
+ OR (NEW.eleve_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM eleve e JOIN sujet s ON s.classe=e.classe
+    WHERE e.id=NEW.eleve_id AND s.id=NEW.sujet_id
+ ))
+ OR (NEW.version_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM version WHERE id=NEW.version_id AND sujet_id=NEW.sujet_id
+ ))
+BEGIN SELECT RAISE(ABORT, 'Relation ou valeur invalide: copie'); END;
+
+CREATE TRIGGER validate_copie_update BEFORE UPDATE ON copie
+WHEN NEW.statut NOT IN ('present','absent')
+ OR (NEW.eleve_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM eleve e JOIN sujet s ON s.classe=e.classe
+    WHERE e.id=NEW.eleve_id AND s.id=NEW.sujet_id
+ ))
+ OR (NEW.version_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM version WHERE id=NEW.version_id AND sujet_id=NEW.sujet_id
+ ))
+BEGIN SELECT RAISE(ABORT, 'Relation ou valeur invalide: copie'); END;
+
+CREATE TRIGGER freeze_copy_identity BEFORE UPDATE ON copie
+WHEN EXISTS(SELECT 1 FROM correction WHERE copie_id=OLD.id) AND
+ (
+   NEW.sujet_id IS NOT OLD.sujet_id
+   OR NEW.version_id IS NOT OLD.version_id
+   OR NEW.statut IS NOT OLD.statut
+   OR (OLD.eleve_id IS NOT NULL AND NEW.eleve_id IS NOT OLD.eleve_id)
+ )
+BEGIN SELECT RAISE(ABORT, 'Identité de copie déjà corrigée'); END;
+
+CREATE TRIGGER freeze_copy_pdf BEFORE UPDATE OF pdf_path ON copie
+WHEN NEW.pdf_path IS NOT OLD.pdf_path AND EXISTS(SELECT 1 FROM correction WHERE copie_id=OLD.id)
+BEGIN SELECT RAISE(ABORT, 'PDF de copie déjà corrigée'); END;
+'''
+
 
 def connect(db_path=DEFAULT_DB):
     path = Path(db_path)
@@ -108,7 +167,10 @@ DROP TABLE item;
 ALTER TABLE item_new RENAME TO item;
 '''
         conn.execute('PRAGMA foreign_keys = OFF')
-        conn.executescript('BEGIN IMMEDIATE;\n' + migration + SCHEMA.read_text(encoding='utf-8') + '\n' + V3_SCHEMA)
+        script = 'BEGIN IMMEDIATE;\n' + migration + SCHEMA.read_text(encoding='utf-8') + '\n' + V3_SCHEMA
+        if version < 4:
+            script += '\n' + V4_SCHEMA
+        conn.executescript(script)
         errors = conn.execute('PRAGMA foreign_key_check').fetchall()
         if errors:
             raise ValueError(f'Intégrité de la base invalide : {len(errors)} liens')
