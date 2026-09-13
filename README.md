@@ -58,9 +58,9 @@ ou `groupes`, sans recopier les noms dans `evaluation.json`.
 
 ## Associer un gros PDF de copies sans le découper
 
-SmartCorrection peut conserver **un seul PDF source pour toute l'évaluation**. Chaque copie
-logique reste rattachée à un élève, mais ne crée aucun fichier PDF individuel : elle référence
-simplement une ou plusieurs pages du PDF source.
+SmartCorrection peut conserver **un seul PDF source pour toute l'évaluation**. Une copie logique
+référence simplement une ou plusieurs pages de ce PDF. Elle peut être rattachée à un élève dès
+l'import, ou rester **non attribuée** si le nom/numéro n'est pas lisible sur la copie.
 
 Exemple `private/copies.csv` :
 
@@ -68,9 +68,12 @@ Exemple `private/copies.csv` :
 numero;version;pages;statut
 1;A;1;present
 2;B;2;present
-3;A;3-4;present
+;A;3-4;present
 4;B;;absent
 ```
+
+La ligne sans `numero` crée une copie non attribuée pour les pages 3-4. Une absence doit toujours
+être rattachée à un élève.
 
 Puis :
 
@@ -81,10 +84,20 @@ smartcorrection import-copies private/copies.csv --sujet 1 --pdf private/copies.
 `pages` accepte un numéro, une plage (`3-5`) ou plusieurs valeurs (`1,3-5`, à citer si le CSV
 utilise la virgule comme séparateur). Une même page d'un même PDF ne peut pas être affectée à
 deux copies. Un nouvel import identique est idempotent. Avant correction, `--replace` permet de
-corriger une association ; après correction, l'identité de la copie, le PDF et ses pages sont figés.
+corriger une association.
 
-`prepare-ai` renvoie ensuite `source.pdf_path` et `source.pages`. Pour une copie issue d'un PDF
-partagé, les annotations utilisent les numéros de page du PDF source.
+Une copie non attribuée peut être corrigée normalement : `prepare-ai` fonctionne avec son
+`copie_id`, son PDF et ses pages. Quand son identité est connue, il suffit de réimporter une ligne
+avec le même PDF, la même version et les mêmes pages mais avec `numero` rempli ; SmartCorrection
+rattache alors la copie existante à l'élève, sans recréer la correction. Après correction, la
+version, le PDF et les pages restent figés ; seul le passage « non attribuée → élève identifié »
+reste autorisé.
+
+Le calcul final des notes est volontairement bloqué tant qu'il reste au moins une copie non
+attribuée, afin de ne pas perdre silencieusement une correction.
+
+`prepare-ai` renvoie `source.pdf_path` et `source.pages`. Pour une copie issue d'un PDF partagé,
+les annotations utilisent les numéros de page du PDF source.
 
 ## Utilisation sur une vraie évaluation
 
@@ -92,7 +105,8 @@ partagé, les annotations utilisent les numéros de page du PDF source.
    et le JSON d'évaluation suivant [le contrat](docs/evaluation_format.md). Le JSON peut ne contenir
    encore aucune copie.
 2. Relire la grille ; inscrire `validee: true` seulement après cette revue, ou la valider en CLI.
-3. Importer l'évaluation, puis associer les élèves aux pages du PDF source :
+3. Importer l'évaluation, puis associer les pages du PDF source. Les copies illisibles peuvent
+   rester sans numéro à ce stade :
 
 ```sh
 python -m moteur import-evaluation evaluation.json --db db/classe.sqlite
@@ -110,7 +124,7 @@ Fournir à l'IA le contexte **et le PDF source**. Pour un PDF partagé, elle ne 
 indiquées dans `source.pages`. Lui demander le [JSON de correction](docs/correction_format.md),
 sans total ni note finale. Une copie illisible doit être revue avant import ; ne pas inventer des points.
 
-5. Importer chaque réponse, calculer et exporter :
+5. Importer chaque réponse, attribuer les éventuelles copies encore anonymes, calculer et exporter :
 
 ```sh
 python -m moteur import-correction correction.json --db db/classe.sqlite
