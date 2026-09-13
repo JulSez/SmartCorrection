@@ -26,6 +26,47 @@ function harness() {
   return {node, nodes, context, run};
 }
 
+function navigationHarness(error=null) {
+  const h=harness(), calls=[];
+  const server={dossier:{id:'demo',echantillon_valide:false},copies:[{reference:'C001',echantillon:true}]};
+  h.run('current=4;renderDossier=()=>{};');
+  h.context.document.querySelectorAll=selector=>selector==='[data-sample]:checked'?[{dataset:{sample:'C001'}}]:[];
+  h.context.fetch=async(url,options)=>{
+    if(options?.method==='POST'){
+      calls.push(JSON.parse(options.body));
+      if(error)return {ok:false,json:async()=>({erreur:error})};
+      server.dossier.echantillon_valide=true;
+    }
+    return {ok:true,json:async()=>JSON.parse(JSON.stringify(server))};
+  };
+  return {...h,calls};
+}
+
+test('next step validates the sample before navigating, without a separate approval button',async()=>{
+  const h=navigationHarness();
+  await h.run('goStep(5)');
+  assert.equal(h.run('current'),5);
+  assert.equal(h.run('state.dossier.echantillon_valide'),true);
+  assert.deepEqual(h.calls,[{action:'echantillon',dossier:'demo',references:['C001'],valider:true}]);
+  assert.doesNotMatch(source,/approve-sample|Je valide l’échantillon/);
+});
+
+test('a rejected sample keeps the current screen and explains what is missing',async()=>{
+  const h=navigationHarness('C001 doit être corrigée et vérifiée avant validation');
+  await h.run('goStep(5)');
+  assert.equal(h.run('current'),4);
+  assert.match(h.node('#toast').textContent,/C001 doit être corrigée/);
+});
+
+test('backward navigation never approves; a sidebar jump uses the saved selection',async()=>{
+  const h=navigationHarness();
+  await h.run('goStep(3)');
+  assert.equal(h.calls.length,0);
+  await h.run('goStep(5)');
+  assert.deepEqual(h.calls[0].references,['C001']);
+  assert.equal(h.run('current'),5);
+});
+
 test('grille and corrigé have separate screens, with a prerequisite before any grid exists', () => {
   const {run, node} = harness();
   run('renderGrid()');

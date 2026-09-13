@@ -42,7 +42,9 @@ def make_server(app, port=0):
             self.send_header('Cache-Control','no-store')
             self.send_header('X-Content-Type-Options','nosniff')
             self.send_header('Referrer-Policy','no-referrer')
-            self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-src 'self'; object-src 'self'; base-uri 'none'; frame-ancestors 'none'")
+            # The PDF viewer is an iframe in this application, not a third-party embed.
+            ancestors = "'self'" if status == 200 and mime == 'application/pdf' else "'none'"
+            self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-src 'self'; object-src 'self'; base-uri 'none'; frame-ancestors "+ancestors)
             self.end_headers()
             self.wfile.write(raw)
 

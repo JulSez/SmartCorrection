@@ -272,7 +272,19 @@ class GuiWorkflowTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
         self.addCleanup(lambda: (server.shutdown(), server.server_close(), thread.join()))
         url = f'http://127.0.0.1:{server.server_port}'
-        html = urllib.request.urlopen(url).read().decode()
+        response = urllib.request.urlopen(url)
+        self.assertIn("frame-ancestors 'none'", response.headers['Content-Security-Policy'])
+        html = response.read().decode()
+        pdf_response = urllib.request.urlopen(url+'/file?kind=source&id='+self.source['id'])
+        self.assertEqual(pdf_response.headers['Content-Type'], 'application/pdf')
+        self.assertIn("frame-ancestors 'self'", pdf_response.headers['Content-Security-Policy'])
+        self.assertNotIn("frame-ancestors 'none'", pdf_response.headers['Content-Security-Policy'])
+        self.assertTrue(pdf_response.read().startswith(b'%PDF-'))
+        external = urllib.request.Request(url+'/file?kind=source&id='+self.source['id'],
+                                         headers={'Origin': 'https://external.invalid'})
+        with self.assertRaises(urllib.error.HTTPError) as denied:
+            urllib.request.urlopen(external)
+        self.assertEqual(denied.exception.code, 403)
         token = html.split('name="csrf-token" content="')[1].split('"')[0]
         data = json.dumps({'action': 'creer', 'classe': 'TEST', 'titre': 'Deuxième'}).encode()
         for headers in ({}, {'X-SmartCorrection-Token': token, 'Origin': 'https://external.invalid'}):
