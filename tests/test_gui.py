@@ -194,6 +194,14 @@ class GuiWorkflowTests(unittest.TestCase):
         app = Application(db, self.root/'legacy-data', legacy)
         self.assertEqual(app.instruction_history('TEST')[0]['texte'], 'Tolérance historique.')
 
+    def test_prompts_have_a_fixed_machine_contract(self):
+        prompt = make_prompt(self.app, self.ident, 'grille')
+        self.assertIn('BLOC TECHNIQUE FIXE', prompt)
+        self.assertIn('pas de ```json', prompt)
+        self.assertIn('objet JSON valide', prompt)
+        latex = make_prompt(self.app, self.ident, 'corrige', 'A')
+        self.assertIn('Rends uniquement le corps LaTeX', latex)
+        self.assertIn('sans \\documentclass', latex)
     def test_http_origin_token_and_file_boundaries(self):
         server = make_server(self.app)
         thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()

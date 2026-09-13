@@ -4,6 +4,28 @@ from .db import database
 from .gui_service import _policy, public_json
 
 
+FIXED_JSON_RULES = '''BLOC TECHNIQUE FIXE — À RESPECTER EXACTEMENT
+Tu dois distinguer la discussion pédagogique du rendu machine. Quand cette étape demande du JSON :
+- réponds avec un objet JSON valide, et rien d’autre autour : pas de ```json, pas de commentaire, pas de texte avant ou après ;
+- utilise des guillemets doubles, aucune virgule finale, aucun commentaire, aucune valeur NaN ou Infinity ;
+- respecte exactement les noms de champs, les types et la structure de l’exemple ; n’ajoute aucun champ ;
+- recopie exactement l’enveloppe dossier et revision fournie par l’application ;
+- les nombres sont des nombres JSON, les identifiants et numéros sont des chaînes ou des entiers selon l’exemple ;
+- ne calcule ni note brute, ni note finale, ni moyenne : Python s’en charge ;
+- si une donnée nécessaire est illisible ou inconnue, utilise null seulement quand l’exemple l’autorise ou signale la copie dans a_revoir ; n’invente jamais.
+L’application valide le JSON avant tout enregistrement. Une réponse non conforme sera refusée et devra être corrigée en conservant les décisions pédagogiques déjà prises.
+'''
+
+FIXED_LATEX_RULES = '''BLOC TECHNIQUE FIXE — RENDU LATEX
+Rends uniquement le corps LaTeX demandé, sans bloc Markdown, sans \\documentclass, sans \\begin{document} et sans \\end{document}.
+N’inclus aucune commande de lecture de fichier, aucun script, aucun accès externe et aucun calcul de note. Les formules doivent être du LaTeX compilable ; utilise align* ou aligned pour aligner les égalités et les équivalences.
+'''
+
+
+def fixed_contract(stage):
+    return FIXED_LATEX_RULES if stage == 'corrige' else FIXED_JSON_RULES
+
+
 def make_prompt(app, ident, stage, version=None, mode='echantillon'):
     state=app.state(ident)
     d=state['dossier']
@@ -19,6 +41,7 @@ def make_prompt(app, ident, stage, version=None, mode='echantillon'):
     prefix+='\n\n'.join(policies)+'\n\n'
     prefix+='Documents prévus dans cette conversation : '+', '.join(f"{f['role']} : {f['nom']}" for f in state['fichiers'])+'.\n'
     prefix+='Si un document nécessaire n’est pas joint ou lisible, demande-le à l’enseignant. Ne prétends pas avoir lu un document manquant.\n\n'
+    prefix += fixed_contract(stage) + '\n'
     envelope={'dossier':ident,'revision':d['revision']}
     if stage=='ouverture':
         return prefix+'''Nous allons préparer et corriger un paquet de copies de mathématiques.

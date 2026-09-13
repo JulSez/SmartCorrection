@@ -86,6 +86,13 @@ la révision courante, les élèves, les items et les copies concernés. Les for
 sont ceux de l’interface ; les commandes CLI conservent [leurs contrats](correction_format.md).
 Coller du JSON strict **sans bloc Markdown**, sans commentaires ni virgule finale.
 
+Chaque consigne est composée de deux parties. Le **bloc technique fixe** est généré par
+l’application et décrit le format entrée/sortie : enveloppe, champs autorisés, types JSON,
+valeurs nulles possibles, absence de calcul de notes et règle « réponse machine uniquement ».
+Il ne doit pas être réécrit pendant la discussion. Le bloc pédagogique est variable : il contient
+le sujet, la classe, la grille, le corrigé, les copies et les décisions de l’enseignant. ChatGPT
+peut le discuter et le préciser, puis doit produire le format fixé par le premier bloc.
+
 ### Grille
 
 L’enveloppe utilise la révision actuelle (0 avant la première validation). L’application l’incrémente
