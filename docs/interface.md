@@ -36,12 +36,13 @@ ensuite enregistrées en Unicode. Réimporter un numéro avec un autre nom est r
 **Corriger un paquet de copies** demande la classe et le titre, puis crée un dossier reprenable.
 Les classes, dossiers, réponses en cours, documents générés et consignes survivent au redémarrage.
 
-## Le parcours en six écrans
+## Le parcours en sept écrans
 
 | Écran | Action de l’enseignant | Résultat conservé |
 |---|---|---|
 | Préparer le dossier | Ajouter le paquet PDF, le sujet, les documents facultatifs ; copier la procédure dans ChatGPT et y joindre les PDF | Documents locaux et consignes utilisées au démarrage |
-| Grille et corrigé | Discuter la grille ; coller son JSON ; vérifier et valider ; faire de même pour le corps LaTeX du corrigé de chaque version | Grille relationnelle validée et corrigés par version |
+| Grille | Discuter uniquement les critères et le barème ; coller le bloc JSON ; vérifier et valider | Grille relationnelle validée |
+| Corrigé | Envoyer la consigne dédiée ; coller le bloc LaTeX complet pour chaque version ; vérifier et valider | Corrigés par version, consultables et modifiables dans ce menu |
 | Repérer les copies | Coller le JSON des pages ; relire et rectifier au besoin identités, pages et versions dans le tableau | Copies logiques, pages physiques du paquet et absences déclarées |
 | Tester la correction | Choisir une à cinq copies ; coller leurs corrections ; générer les fiches ; demander des ajustements ; valider l’échantillon | Corrections structurées et PDF d’essai |
 | Corriger le reste | Copier la consigne pour toutes les copies restantes ; importer les réponses ; générer le document final | Fiches PDF assemblées, données JSON, notes CSV et sources LaTeX |
@@ -67,6 +68,13 @@ référence et la mention « élève non identifié », puis être associée à 
 correction. Le CLI `calculate` conserve son exigence d’identification de toutes les copies.
 Le numéro d’une copie déjà attribuée et corrigée ne peut pas être changé silencieusement.
 
+Les consignes ne transmettent ni la liste de classe (noms, prénoms, numéros), ni les noms des
+fichiers joints. ChatGPT repère les copies dans le PDF avec des références `C001`, etc. et
+renvoie `numero: null`. L’enseignant associe les élèves dans le tableau local de prévisualisation
+de l’inventaire, puis vérifie et valide. Les sélections envoyées pour correction ne contiennent
+que les références, versions et pages, jamais l’identité locale. Cela n’anonymise pas les PDF :
+les noms présents sur les copies jointes restent visibles pour ChatGPT.
+
 Toutes les pages du paquet doivent être affectées exactement une fois, soit à une copie, soit
 à `pages_ignorees` avec un motif. Les pages peuvent être non contiguës. Aucun élève manquant
 n’est automatiquement déclaré absent. Le paquet source reste un seul fichier, jamais découpé.
@@ -79,12 +87,37 @@ annule la validation de l’échantillon. L’enseignant peut confirmer une corr
 après vérification ou importer une correction mise à jour. Les rendus antérieurs sont marqués
 « à régénérer ». Une compilation échouée ne publie pas de PDF partiel.
 
+Un message Windows « Accès refusé » concerne les fichiers locaux et ne doit pas être envoyé
+à ChatGPT pour réparation du JSON. Fermer les PDF ouverts puis réessayer ; si l’erreur persiste,
+vérifier les droits du dossier de sortie et un éventuel verrouillage par sa synchronisation.
+L’export réessaie brièvement les opérations de création, suppression et renommage bloquées.
+Si le nettoyage du dossier temporaire échoue aussi, l’erreur initiale reste affichée. La demande
+de réparation de format est réservée aux validations de réponses, avec une consigne et une
+réponse non vides ; elle n’apparaît plus pour les erreurs de génération ou d’accès aux fichiers.
+
 ## Format à demander à ChatGPT
 
-Utiliser en priorité la consigne préparée par l’écran : elle contient l’identifiant du dossier,
-la révision courante, les élèves, les items et les copies concernés. Les formats ci-dessous
+La consigne s’affiche automatiquement à l’ouverture de chaque étape. Cliquer sur
+« Copier la consigne pour ChatGPT », puis l’envoyer dans la conversation ChatGPT. Coller ensuite
+la réponse de ChatGPT dans la zone de droite, la vérifier et la valider. Aucun clic de génération
+n’est nécessaire. Après un changement de sélection des copies, enregistrer la sélection :
+la consigne s’actualise automatiquement. Les documents doivent être joints séparément dans ChatGPT.
+
+Utiliser en priorité cette consigne : elle contient l’identifiant du dossier,
+la révision courante, les items et les références des copies concernés, sans liste nominative. Les formats ci-dessous
 sont ceux de l’interface ; les commandes CLI conservent [leurs contrats](correction_format.md).
-Coller du JSON strict **sans bloc Markdown**, sans commentaires ni virgule finale.
+Le rendu final de ChatGPT est **un unique bloc de code** `json` (ou `latex` pour le corrigé),
+sans texte autour ni autre mise en forme Markdown. Utiliser le bouton « Copier » du bloc.
+L’application accepte le contenu brut ainsi qu’un bloc complet avec ses balises ; elle ne
+cherche pas de données au milieu d’une discussion. Le JSON reste strict : sans commentaires,
+virgule finale, doubles clés ni nombres non finis.
+
+Chaque consigne est composée de deux parties. Le **bloc technique fixe** est généré par
+l’application et décrit le format entrée/sortie : enveloppe, champs autorisés, types JSON,
+valeurs nulles possibles, absence de calcul de notes et règle « réponse machine uniquement ».
+Il ne doit pas être réécrit pendant la discussion. Le bloc pédagogique est variable : il contient
+le sujet, la classe, la grille, le corrigé, les copies et les décisions de l’enseignant. ChatGPT
+peut le discuter et le préciser, puis doit produire le format fixé par le premier bloc.
 
 ### Grille
 
@@ -149,6 +182,12 @@ Ainsi, $S=\{2\}$.
 
 Il sera inclus dans les fiches de la version sélectionnée. Le bouton de vérification contrôle
 le format général ; la syntaxe LaTeX est vérifiée lors de la compilation des fiches.
+Le menu Corrigé dispose d’une grande zone de saisie redimensionnable ; l’aperçu du code n’est
+plus plafonné en hauteur. Un corrigé enregistré est rechargé intégralement quand on revient
+dans ce menu ; un brouillon en cours reste prioritaire. Aucun nombre de pages ni plafond de
+caractères propre au corrigé n’est imposé. La protection générale des requêtes HTTP reste de
+160 Mio (un dépassement est refusé, jamais tronqué). ChatGPT doit développer toutes les questions
+et laisser LaTeX répartir le corrigé sur plusieurs pages, sans le condenser pour tenir sur une page.
 
 ### Corrections
 

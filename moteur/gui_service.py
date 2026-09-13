@@ -26,6 +26,19 @@ def public_json(value):
     return json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False)
 
 
+def response_body(text, language):
+    """Accept raw content or one copyable code block, never extract from prose."""
+    if not isinstance(text, str):
+        raise ValueError('Réponse : texte attendu')
+    if '```' not in text:
+        return text
+    languages = r'(?:latex|tex)?' if language == 'latex' else r'(?:json)?'
+    match = re.fullmatch(r'```' + languages + r'[ \t]*\r?\n([\s\S]*?)\r?\n```', text.strip(), re.IGNORECASE)
+    if not match or re.search(r'^```', match[1], re.MULTILINE):
+        raise ValueError('Coller un seul bloc de code complet, sans texte autour, ou utiliser son bouton Copier')
+    return match[1]
+
+
 def _put_instructions(conn, scope, classe, text, source=None):
     rid = conn.execute('INSERT INTO consigne_revision(portee,classe,texte,source_dossier) VALUES(?,?,?,?)',
                        (scope, classe, text, source)).lastrowid
@@ -184,7 +197,7 @@ class Application:
         return row
 
     def exchange(self, ident, stage, text, commit=False):
-        data = parse_json(text)
+        data = parse_json(response_body(text, 'json'))
         with database(self.db_path) as conn:
             conn.execute('BEGIN IMMEDIATE')
             dossier = self._dossier(conn, ident)
@@ -237,6 +250,7 @@ class Application:
                 'copies_a_reprendre': len([c for c in copies if c['correction_id']]), 'revision': dossier['revision']+1}
 
     def corrige(self, ident, version, text, commit=False):
+        text = response_body(text, 'latex')
         string(text, 'corrigé LaTeX')
         if any(word in text for word in (r'\documentclass',r'\begin{document}',r'\end{document}')):
             raise ValueError('Coller uniquement le corps du corrigé, sans préambule ni début/fin de document')
