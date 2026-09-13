@@ -11,6 +11,11 @@ def calculate(conn, sujet_id):
     if not subject:
         raise ValueError('Sujet inconnu')
     cfg = config_from_mapping(json.loads(subject['config_notes'] or '{}'))
+    unassigned = conn.execute(
+        'SELECT COUNT(*) FROM copie WHERE sujet_id=? AND eleve_id IS NULL', (sujet_id,)
+    ).fetchone()[0]
+    if unassigned:
+        raise ValueError(f'{unassigned} copie(s) non attribuée(s) à un élève')
     copies = conn.execute('''SELECT c.*,e.numero,e.classe,v.version FROM copie c JOIN eleve e ON e.id=c.eleve_id
         LEFT JOIN version v ON v.id=c.version_id WHERE c.sujet_id=? ORDER BY e.numero''', (sujet_id,)).fetchall()
     if not copies:
