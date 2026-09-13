@@ -54,7 +54,7 @@ def render_student(student, subject, cfg):
              r'\usepackage[T1]{fontenc}', r'\usepackage{lmodern}', r'\IfFileExists{french.ldf}{\usepackage[french]{babel}}{}', r'\usepackage{amsmath,amssymb,longtable,array}',
              r'\usepackage[margin=18mm]{geometry}', r'\setlength{\parindent}{0pt}', r'\setlength{\parskip}{5pt}',
              r'\begin{document}', r'{\Large\bfseries '+esc(subject.get('titre') or 'Évaluation')+r'}\par',
-             esc(f"{subject['classe']} - Élève n° {student['numero']} - Version {student['version'] or '?'}"),
+             esc(f"{subject['classe']} - {student.get('label') or ('Élève n° ' + str(student['numero']))} - Version {student['version'] or '?'}"),
              r'\par\vspace{4mm}\renewcommand{\arraystretch}{1.5}']
     if individual_only:
         lines += [r'\begin{tabular}{|p{.40\linewidth}|}\hline',
@@ -140,7 +140,7 @@ def export_grids(conn, sujet_id, directory):
         (directory/f"grille_{grid['id']}.md").write_text('\n'.join(lines)+'\n', encoding='utf-8')
 
 
-def export_results(conn, result, output, pdf=False):
+def export_results(conn, result, output, pdf=False, combined=False):
     """Build in a fresh directory; never expose partial or stale exports as a success."""
     output = Path(output).resolve()
     if output.exists():
@@ -153,7 +153,7 @@ def export_results(conn, result, output, pdf=False):
         students = [build_student_data(conn, result, row) for row in result['notes']]
         payload = dict(result, fiches=students)
         (stage/'notes.json').write_text(json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False)+'\n', encoding='utf-8')
-        fields = ['numero','statut','groupe','note_brute','bareme_max','note_individuelle','note_groupe','note_finale','camarades']
+        fields = ['copie_id','numero','statut','groupe','note_brute','bareme_max','note_individuelle','note_groupe','note_finale','camarades']
         with (stage/'notes.csv').open('w', newline='', encoding='utf-8-sig') as f:
             writer = csv.DictWriter(f, fields, delimiter=';')
             writer.writeheader()
@@ -162,10 +162,20 @@ def export_results(conn, result, output, pdf=False):
                 row['camarades'] = ' | '.join(f"{p['numero']}: {fmt(p['note_individuelle'])}" for p in student['camarades'])
                 writer.writerow(row)
         for student in students:
-            path = stage/f"eleve_{student['numero']:03d}.tex"
+            name = f"eleve_{student['numero']:03d}" if student['numero'] is not None else f"copie_{student['copie_id']:04d}"
+            path = stage/f"{name}.tex"
             path.write_text(render_student(student, result['sujet'], cfg), encoding='utf-8')
             if pdf:
                 compile_pdf(path)
+        if pdf and combined:
+            from pypdf import PdfWriter
+            writer = PdfWriter()
+            try:
+                for path in sorted(stage.glob('*.pdf')):
+                    writer.append(str(path))
+                writer.write(str(stage/'corrections.pdf'))
+            finally:
+                writer.close()
         manifest = {'format_version': 1, 'sujet_id': result['sujet']['id'], 'pdf': pdf,
                     'files': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(stage.iterdir()) if p.suffix in {'.json','.csv','.tex','.pdf','.md'}}}
         (stage/'manifest.json').write_text(json.dumps(manifest, indent=2)+'\n', encoding='utf-8')

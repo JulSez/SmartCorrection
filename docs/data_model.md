@@ -1,7 +1,7 @@
 # Modèle SQLite et migration
 
 `moteur/schema.sql` est le schéma distribué ; `db/schema.sql` est sa copie documentaire,
-vérifiée par un test. `PRAGMA user_version = 2`. Les connexions du moteur activent les clés
+vérifiée par un test. `moteur/gui_schema.sql` ajoute les tables de l’interface. `PRAGMA user_version = 5`. Les connexions du moteur activent les clés
 étrangères et sont fermées explicitement ; toute écriture d'import utilise une transaction.
 
 | Relation | Règle |
@@ -55,6 +55,28 @@ une version de base future. Une sauvegarde SQLite avant migration permet un reto
 
 Les chemins des PDF deviennent absolus à l'import : déplacer le projet impose de mettre à jour
 ces chemins dans la base. Les LaTeX des versions/corrigés et la configuration restent dans SQLite.
-Les Markdown pédagogiques vivent séparément et sont ajoutés au contexte IA sur demande. Les
+L’interface importe une fois les Markdown pédagogiques existants puis utilise les consignes
+versionnées dans SQLite. Le CLI peut encore ajouter un fichier Markdown au contexte sur demande. Les
 exports contiennent leurs données de rendu et les sommes de contrôle des fichiers finaux.
 Le manifeste de sortie n'est pas une sauvegarde de la base ni des PDF sources.
+
+## Migration de l’interface (v5)
+
+Après les migrations des pages logiques (v3) et des copies non attribuées (v4), v5 ajoute les
+relations suivantes sans reconstruire les tables de correction existantes :
+
+| Relation | Usage |
+|---|---|
+| `ui_dossier`, `ui_revision` | Dossier enseignant et sujets successifs lors d’un changement de grille |
+| `ui_fichier` | Documents enregistrés, rôle, chemin, nombre de pages et empreinte |
+| `ui_copie` | Référence stable, copie courante, échantillon et motif de revue |
+| `ui_page_ignoree` | Page du paquet explicitement écartée avec motif |
+| `ui_brouillon`, `ui_echange` | Réponse en cours et historique des réponses validées |
+| `ui_rendu` | Sortie archivée, révision, statut final et indicateur de validité |
+| `consigne_revision`, `consigne_active` | Textes pédagogiques complets et version active par portée |
+| `ui_meta` | Marqueur d’import unique des anciens Markdown |
+
+Les réponses JSON brutes sont conservées comme brouillons et journal d’échange. Les grilles,
+items, copies, annotations et scores **validés** utilisent les tables relationnelles communes.
+Un dossier mémorise les identifiants des consignes actives à sa création. Une nouvelle version
+de grille conserve les données de la précédente et crée de nouvelles corrections à remplir.

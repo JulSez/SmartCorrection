@@ -140,3 +140,12 @@ Voir les [exemples importables](../examples/tmex_demo/).
 Une correction existante n'est pas écrasée par défaut. Le remplacement conserve l'identité de
 correction et invalide les notes finales en cache du sujet. Il n'y a pas d'historique des révisions :
 sauvegarder la base si nécessaire.
+
+
+## Parcours graphique
+
+L’interface ajoute une enveloppe `dossier` / `revision` et utilise des références de copies
+`C001` ; elle résout les identifiants SQL avant d’appeler l’importeur. Plusieurs réponses partielles
+sont possibles, chacune avec des copies complètes. Les points non attribués exigent une explication.
+Les réponses validées sont journalisées dans `ui_echange`. Ces ajouts ne changent pas le contrat
+batch CLI ci-dessus. Voir [les formats de l’interface](interface.md#format-à-demander-à-chatgpt).

@@ -1,0 +1,230 @@
+# Interface graphique locale
+
+Depuis la racine du dépôt, avec Python 3.11 ou plus récent :
+
+```sh
+python -m pip install ".[gui]"
+python -m moteur gui
+```
+
+Sous Windows, double-cliquer sur `Lancer-SmartCorrection.cmd`. Ce lanceur utilise `py -3`
+ou `python`, installe la dépendance Python de l’interface si elle manque, puis ouvre le navigateur.
+Garder la fenêtre de lancement ouverte. Ctrl+C arrête le serveur ; les données restent enregistrées.
+
+L’application ouvre `http://127.0.0.1:8765`. Elle fonctionne sans serveur distant ni clé API.
+Les échanges avec ChatGPT se font par copier-coller et pièces jointes dans une conversation
+ouverte par l’enseignant. Ajouter un PDF dans SmartCorrection ne le transmet pas à ChatGPT.
+
+LaTeX reste nécessaire pour les PDF : une distribution TeX Live ou MiKTeX avec `pdflatex`,
+AMS, Geometry, Longtable et Latin Modern. Babel français est recommandé.
+`pypdf` compte les pages des sources et assemble les PDF produits par LaTeX ; il ne compose
+pas les formules. Sans LaTeX, les imports et les exports de sources `.tex` restent utilisables.
+
+Options :
+
+```sh
+smartcorrection-gui --db db/mon-travail.sqlite --data-dir private/mon-travail --port 8766 --no-browser
+```
+
+## Les deux boutons de l’accueil
+
+**Ajouter une classe** importe un CSV `nom,prenom` avec prévisualisation. Une colonne `numero`
+facultative permet de conserver les numéros existants. Les séparateurs virgule, point-virgule
+et tabulation sont reconnus. L’interface lit UTF-8 et les CSV Windows-1252 ; les données sont
+ensuite enregistrées en Unicode. Réimporter un numéro avec un autre nom est refusé.
+
+**Corriger un paquet de copies** demande la classe et le titre, puis crée un dossier reprenable.
+Les classes, dossiers, réponses en cours, documents générés et consignes survivent au redémarrage.
+
+## Le parcours en six écrans
+
+| Écran | Action de l’enseignant | Résultat conservé |
+|---|---|---|
+| Préparer le dossier | Ajouter le paquet PDF, le sujet, les documents facultatifs ; copier la procédure dans ChatGPT et y joindre les PDF | Documents locaux et consignes utilisées au démarrage |
+| Grille et corrigé | Discuter la grille ; coller son JSON ; vérifier et valider ; faire de même pour le corps LaTeX du corrigé de chaque version | Grille relationnelle validée et corrigés par version |
+| Repérer les copies | Coller le JSON des pages ; relire et rectifier au besoin identités, pages et versions dans le tableau | Copies logiques, pages physiques du paquet et absences déclarées |
+| Tester la correction | Choisir une à cinq copies ; coller leurs corrections ; générer les fiches ; demander des ajustements ; valider l’échantillon | Corrections structurées et PDF d’essai |
+| Corriger le reste | Copier la consigne pour toutes les copies restantes ; importer les réponses ; générer le document final | Fiches PDF assemblées, données JSON, notes CSV et sources LaTeX |
+| Retour d’expérience | Demander à ChatGPT de réécrire les consignes ; comparer puis valider les deux textes complets | Nouvelles consignes générales et de classe, avec historique |
+
+La correction de l’échantillon peut être remplacée autant que nécessaire. Le reste n’impose
+pas une succession de lots de cinq : si ChatGPT doit fractionner sa réponse, chaque réponse
+peut contenir plusieurs **copies complètes**. L’écran indique les copies encore à traiter.
+
+La notation de cette première interface est **individuelle, sur 20, arrondie au demi-point**.
+La note brute vient des `CorrectionItem`, puis Python convertit selon le total de la grille.
+Les absences restent `ABS`. Le moteur CLI conserve sa configuration plus large et ses groupes.
+
+## Validation et reprises
+
+Le bouton « Vérifier » exécute toutes les validations dans une transaction annulée, puis présente
+le résultat. « Valider et enregistrer » relance ces validations et enregistre la réponse entière.
+Un seul item invalide annule toute la réponse, y compris les remplacements déjà commencés.
+Les doubles clés JSON, `NaN`, les champs inconnus et les réponses d’une ancienne grille sont rejetés.
+
+Une copie non identifiée garde une référence `C001`, etc. Elle peut recevoir une fiche avec cette
+référence et la mention « élève non identifié », puis être associée à un élève sans perdre sa
+correction. Le CLI `calculate` conserve son exigence d’identification de toutes les copies.
+Le numéro d’une copie déjà attribuée et corrigée ne peut pas être changé silencieusement.
+
+Toutes les pages du paquet doivent être affectées exactement une fois, soit à une copie, soit
+à `pages_ignorees` avec un motif. Les pages peuvent être non contiguës. Aucun élève manquant
+n’est automatiquement déclaré absent. Le paquet source reste un seul fichier, jamais découpé.
+Un dossier accepte un paquet ; pour le remplacer, créer un nouveau dossier.
+
+Une nouvelle grille crée une révision et conserve l’ancien sujet et ses corrections. Les
+références et pages des copies sont reprises, mais elles doivent être corrigées avec la nouvelle
+grille. Modifier le corrigé de référence signale les corrections concernées « à revoir » et
+annule la validation de l’échantillon. L’enseignant peut confirmer une correction existante
+après vérification ou importer une correction mise à jour. Les rendus antérieurs sont marqués
+« à régénérer ». Une compilation échouée ne publie pas de PDF partiel.
+
+## Format à demander à ChatGPT
+
+Utiliser en priorité la consigne préparée par l’écran : elle contient l’identifiant du dossier,
+la révision courante, les élèves, les items et les copies concernés. Les formats ci-dessous
+sont ceux de l’interface ; les commandes CLI conservent [leurs contrats](correction_format.md).
+Coller du JSON strict **sans bloc Markdown**, sans commentaires ni virgule finale.
+
+### Grille
+
+L’enveloppe utilise la révision actuelle (0 avant la première validation). L’application l’incrémente
+après validation. `validee` n’est pas autorisé : cette décision appartient au bouton enseignant.
+Les exercices, questions et items suivent [le format d’évaluation](evaluation_format.md).
+
+```json
+{
+  "dossier": "IDENTIFIANT_COPIE_DE_LA_CONSIGNE",
+  "revision": 0,
+  "versions": [{"version": "A"}],
+  "grilles": [{
+    "nom": "Équations", "version": "A",
+    "exercices": [{"numero": "1", "questions": [{"numero": "1", "items": [
+      {"code": "E1Q1I1", "description": "Résoudre l’équation", "bareme_max": 2,
+       "regle_correction": "Appliquer les exigences discutées avec l’enseignant."},
+      {"code": "E1Q1I2", "description": "Conclure", "bareme_max": 1}
+    ]}]}]
+  }]
+}
+```
+
+Une grille commune utilise `version: null`. Chaque version doit avoir une grille compatible.
+`sujet_latex` est facultatif dans `versions` : joindre le sujet PDF suffit pour ce parcours.
+Les codes des items sont uniques dans leur grille, les numéros d’exercice/question sont des
+chaînes. Les maxima sont des nombres ; le total d’une grille doit être strictement positif.
+
+### Inventaire des copies
+
+Exemple pour un paquet de trois pages et une grille déjà validée :
+
+```json
+{
+  "dossier": "IDENTIFIANT_COPIE_DE_LA_CONSIGNE", "revision": 1,
+  "copies": [
+    {"reference": "C001", "numero": 1, "version": "A", "pages": [1]},
+    {"reference": "C002", "numero": null, "version": "A", "pages": [2]}
+  ],
+  "pages_ignorees": [{"page": 3, "motif": "Page blanche"}],
+  "absents": []
+}
+```
+
+La pagination est physique, à partir de 1 dans le PDF du paquet. `numero` est un entier de la
+liste de classe ou `null`. `absents` ne contient que les numéros explicitement déclarés absents.
+Les références `C001` à `C999999` sont stables dans le dossier.
+
+### Corrigé de référence
+
+Coller le **corps LaTeX**, sans enveloppe JSON, préambule, `documentclass` ni `begin/end{document}` :
+
+```latex
+\section*{Exercice 1}
+\begin{align*}
+2x+3 &= 7 \\
+2x &= 4 \\
+x &= 2
+\end{align*}
+Ainsi, $S=\{2\}$.
+```
+
+Il sera inclus dans les fiches de la version sélectionnée. Le bouton de vérification contrôle
+le format général ; la syntaxe LaTeX est vérifiée lors de la compilation des fiches.
+
+### Corrections
+
+```json
+{
+  "dossier": "IDENTIFIANT_COPIE_DE_LA_CONSIGNE", "revision": 1,
+  "corrections": [{
+    "reference": "C001",
+    "items": [
+      {"item_code": "E1Q1I1", "points_obtenus": 1, "statut": "partiel",
+       "commentaire": "Une erreur de signe dans la dernière égalité.", "annotation": null},
+      {"item_code": "E1Q1I2", "points_obtenus": 1, "statut": "acquis"}
+    ],
+    "annotations": [{"item_code": "E1Q1I1", "page": 1, "texte": "Vérifier le signe."}],
+    "conseils": [{"item_code": "E1Q1I1", "texte": "Remplacer x par la solution trouvée pour la vérifier.", "priorite": 1}],
+    "commentaire_global": "Méthode comprise ; soigner la vérification."
+  }],
+  "a_revoir": []
+}
+```
+
+Tous les items de chaque copie doivent figurer exactement une fois. Les points sont des nombres
+finis entre 0 et le maximum. Si le maximum n’est pas attribué, `commentaire` ou `annotation`
+est obligatoire et non vide. Les statuts facultatifs sont `acquis`, `partiel`, `non_acquis`,
+`non_repondu`. Les annotations sont liées aux items et à une page appartenant à cette copie.
+Les coordonnées facultatives suivent [le contrat commun](correction_format.md).
+
+Aucun total, `copie_id`, `grille_id` ou groupe n’est attendu de ChatGPT ici. L’application résout
+les références puis appelle l’importeur commun. Pour corriger une réponse antérieure, fournir
+de nouveau tous les items de la copie concernée. Les réponses acceptées restent dans l’historique
+d’échanges SQL ; les tables de correction contiennent la dernière version validée.
+
+Pour une écriture illisible, omettre cette copie de `corrections` et fournir
+`"a_revoir": [{"reference": "C002", "motif": "Dernière ligne illisible"}]`.
+Il ne faut ni inventer un score, ni traiter une copie incomplète comme un zéro.
+
+### Consignes pour la prochaine fois
+
+Après le document final (ou l’export final des sources), demander deux **textes complets de
+remplacement**, basés sur les décisions réelles de la discussion. Recopier les identifiants
+des consignes actives depuis le message généré ; `null` signifie qu’aucune version n’existe encore.
+
+```json
+{
+  "dossier": "IDENTIFIANT_COPIE_DE_LA_CONSIGNE", "revision": 1,
+  "base_generale": null, "base_classe": null,
+  "generales": "Ne pas pénaliser deux fois une même erreur propagée, sauf règle explicite de la grille.",
+  "classe": "Exiger une conclusion rédigée après la résolution."
+}
+```
+
+Ces règles sont des **exemples**, pas des choix appliqués par défaut. L’enseignant compare la
+proposition avec les textes actifs avant de remplacer. Les anciennes versions restent conservées.
+Si une autre évaluation a déjà mis à jour les consignes, une proposition fondée sur l’ancienne
+version est rejetée. Un dossier en cours garde les consignes de son démarrage ; seuls les nouveaux
+dossiers prennent les nouveaux textes. Ne conserver ni noms, ni notes individuelles, ni règles
+propres à un seul exercice dans les consignes durables.
+
+## Données, sauvegarde et limites
+
+Par défaut : base `db/smartcorrection.sqlite`, PDF et rendus sous `private/interface/`.
+Sauvegarder **les deux**, application arrêtée. Les chemins de documents sont absolus : conserver
+l’emplacement lors d’une restauration. Les données élèves et sorties sont ignorées par Git.
+
+Au premier lancement, les Markdown de classe existants, dont `classes/TMEX.md`, sont importés
+une fois dans les consignes SQLite. Ensuite, le parcours graphique lit et remplace ces consignes
+dans l’application : il n’utilise plus les `.md` comme mémoire active. Les anciens fichiers et
+l’option CLI `--classe-md` restent disponibles pour compatibilité. Les grilles lisibles continuent
+d’être exportées en Markdown.
+
+Le serveur écoute uniquement la boucle locale, vérifie l’origine des requêtes et exige un jeton
+pour les écritures. Il sert uniquement les fichiers enregistrés sous son répertoire de données.
+Le LaTeX doit rester un fragment de confiance ; [les précautions de compilation](../latex/README.md)
+ne constituent pas un bac à sable complet.
+
+Les annotations sont listées sur la fiche, pas dessinées sur le scan original. Les documents
+joints à ce premier parcours doivent être des PDF. Les variantes de notation et groupes restent
+accessibles dans le moteur CLI. Les tests utilisent des évaluations **fictives** : la relecture
+d’un paquet réel, du rendu et du parcours Windows reste une étape de validation enseignant.

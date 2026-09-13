@@ -180,6 +180,11 @@ def build_parser():
             p.add_argument('--output', help='Écrire le paquet JSON directement en UTF-8 dans ce fichier')
         if name == 'validate-grid':
             p.add_argument('--grille', type=int, required=True)
+    gui = sub.add_parser('gui', help='Ouvrir l’interface graphique locale')
+    gui.add_argument('--db', default=str(DEFAULT_DB))
+    gui.add_argument('--data-dir', default='private/interface')
+    gui.add_argument('--port', type=int, default=8765)
+    gui.add_argument('--no-browser', action='store_true')
     p = sub.add_parser('note', help='Tester une configuration sans base')
     p.add_argument('--config')
     p.add_argument('--individual', type=float, required=True)
@@ -192,6 +197,10 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     try:
         command = args.command
+        if command == 'gui':
+            from .gui import serve
+            serve(args.db, args.data_dir, args.port, not args.no_browser)
+            return 0
         if command == 'init-db':
             value = {'base': str(init_db(args.db))}
         elif command == 'import-classe':

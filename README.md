@@ -1,14 +1,35 @@
 # SmartCorrection
 
-Moteur **local**, Python 3.11+ et SQLite, sans dépendance Python externe ni appel IA
-pour les imports, les calculs ou les exports. L'IA propose le barème et interprète les copies ;
+Moteur **local**, Python 3.11+ et SQLite, sans appel IA pour les imports, les calculs ou les exports.
+Le moteur CLI est sans dépendance Python externe ; l’interface utilise aussi `pypdf`. L'IA propose le barème et interprète les copies ;
 l'enseignant valide la grille, et Python calcule les notes à partir de chaque item.
 
-## Premier pipeline complet
+## Interface graphique
+
+Sous Windows, double-cliquer sur **`Lancer-SmartCorrection.cmd`**. Ou, depuis le dépôt :
+
+```sh
+python -m pip install ".[gui]"
+python -m moteur gui
+```
+
+Le navigateur s’ouvre sur une application locale avec deux boutons : **Ajouter une classe**
+(CSV nom/prénom) et **Corriger un paquet de copies**. Le parcours prépare les messages à copier
+dans ChatGPT, valide les JSON de grille et de correction, permet un essai sur cinq copies,
+puis produit les fiches du paquet entier. Les consignes générales et de classe sont réécrites
+avec ChatGPT en fin de correction et conservées dans SQLite pour les prochains dossiers.
+
+**LaTeX reste le moteur de rendu mathématique.** `pypdf` compte les pages et assemble les PDF.
+Cette première interface utilise une notation individuelle sur 20, sans groupe.
+
+[Installation, parcours et formats des réponses ChatGPT](docs/interface.md)
+
+## Premier pipeline en ligne de commande
 
 Depuis la racine du dépôt :
 
 ```sh
+python -m pip install ".[gui]"
 python -m unittest discover -s tests -v
 python -m moteur run examples/tmex_demo/pipeline.json --db db/demo.sqlite --output exports/demo
 ```
@@ -93,13 +114,13 @@ rattache alors la copie existante à l'élève, sans recréer la correction. Apr
 version, le PDF et les pages restent figés ; seul le passage « non attribuée → élève identifié »
 reste autorisé.
 
-Le calcul final des notes est volontairement bloqué tant qu'il reste au moins une copie non
+En ligne de commande, le calcul final des notes est volontairement bloqué tant qu'il reste au moins une copie non
 attribuée, afin de ne pas perdre silencieusement une correction.
 
 `prepare-ai` renvoie `source.pdf_path` et `source.pages`. Pour une copie issue d'un PDF partagé,
 les annotations utilisent les numéros de page du PDF source.
 
-## Utilisation sur une vraie évaluation
+## Utilisation CLI sur une vraie évaluation
 
 1. Importer la classe depuis un CSV local, puis préparer `classes/<classe>.md`, les savoir-faire
    et le JSON d'évaluation suivant [le contrat](docs/evaluation_format.md). Le JSON peut ne contenir
@@ -138,8 +159,8 @@ pour un lot complet. `python -m moteur --help` liste les commandes.
 
 ## Responsabilités et état
 
-- **SQLite** : sujet, versions, corrigés, grilles, items, copies logiques, pages de PDF, corrections, annotations, conseils et groupes normalisés.
-- **Markdown** : mémoire par classe et grilles lisibles ; aucune modification automatique des règles pédagogiques.
+- **SQLite** : données de correction normalisées, consignes pédagogiques versionnées et dossiers de l’interface.
+- **Markdown** : grilles lisibles et anciens fichiers de classe ; l’interface migre une fois leur contenu vers SQLite.
 - **Python** : validation stricte, transactions, calcul configurable, orchestration, exports et contexte IA.
 - **LaTeX** : rendu des notes, bilan par item, annotations, conseils et corrigé de la version.
 - **IA** : intervention extérieure au moteur pour proposer les grilles et interpréter les copies.
@@ -150,4 +171,5 @@ pour un lot complet. `python -m moteur --help` liste les commandes.
 Les annotations localisées sont enregistrées et listées dans la fiche ; leur superposition sur
 le PDF original n'est pas encore implémentée. La proposition automatique de grille et l'appel
 à un fournisseur IA restent hors du pipeline déterministe. La validation sur une vraie
-évaluation nécessite de fournir le sujet, son corrigé, les copies et les groupes réels.
+évaluation nécessite de fournir le sujet, son corrigé et les copies réelles (ainsi que les groupes
+si le parcours CLI les utilise).

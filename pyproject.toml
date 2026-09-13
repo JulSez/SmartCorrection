@@ -1,12 +1,13 @@
 [project]
 name = "smartcorrection"
-version = "0.2.0"
+version = "0.3.0"
 description = "Moteur local de correction, notation et rendu pour évaluations"
 requires-python = ">=3.11"
 dependencies = []
 
 [project.scripts]
 smartcorrection = "moteur.pipeline:main"
+smartcorrection-gui = "moteur.gui:main"
 
 [tool.setuptools]
 packages = ["moteur"]
@@ -16,4 +17,7 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.package-data]
-moteur = ["schema.sql"]
+moteur = ["schema.sql", "gui_schema.sql", "web/*"]
+
+[project.optional-dependencies]
+gui = ["pypdf>=4"]

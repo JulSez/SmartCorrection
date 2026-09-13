@@ -32,3 +32,25 @@ Valider le logiciel sur une évaluation réelle fournie par l'enseignant, ajuste
 pédagogiques et le rendu, puis ajouter si utile la superposition des annotations sur les scans.
 Les prochains développements doivent partir des données réelles plutôt que d'un nouveau
 langage de formules ou d'une infrastructure distante.
+
+## Orchestrateur graphique
+
+`gui.py` fournit un serveur HTTP de bibliothèque standard lié à `127.0.0.1` et sert les fichiers
+HTML/CSS/JavaScript de `moteur/web`. `gui_service.py` orchestre imports, révisions et rendus ;
+`gui_prompts.py` construit les messages à copier dans ChatGPT depuis les données du dossier.
+Aucun fournisseur IA ni service d’hébergement n’est requis.
+
+Les imports graphiques vérifient d’abord l’enveloppe dossier/révision puis réutilisent les
+importeurs métier. Une réponse peut ne contenir qu’une partie des copies, mais chaque correction
+est complète et la réponse entière est atomique. La commande batch CLI issue de la PR #5 garde
+son contrat : exactement toutes les copies présentes du sujet.
+
+`calculate_selection` est réservé à la notation individuelle et peut afficher les copies anonymes
+ou un échantillon. Le calcul complet CLI et les groupes gardent leurs validations existantes.
+Les deux chemins utilisent les mêmes fonctions pures de calcul et les mêmes tables de scores.
+Les fiches sortent par le même rendu LaTeX ; pypdf assemble le document collectif.
+
+La mémoire pédagogique du parcours graphique est dans SQLite. ChatGPT propose deux textes de
+remplacement en fin de correction ; l’enseignant relit les différences avant validation. Les
+dossiers futurs utilisent les nouvelles consignes et les dossiers en cours conservent leur
+instantané. [Détails et contrats](interface.md).
