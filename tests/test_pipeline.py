@@ -46,9 +46,10 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(notes[31]['note_individuelle'],15)
         self.assertEqual(len(list(out.glob('*.tex'))),4)
         self.assertEqual(len(list(out.glob('grille_*.md'))),2)
-        self.assertIn('E1Q1I1',(out/'grille_1.md').read_text())
-        self.assertIn('2x+3=11', (out/'eleve_002.tex').read_text())
-        self.assertIn('Ajouter la vérification', (out/'eleve_002.tex').read_text())
+        self.assertIn('E1Q1I1',(out/'grille_1.md').read_text(encoding='utf-8'))
+        tex=(out/'eleve_002.tex').read_text(encoding='utf-8')
+        self.assertIn('2x+3=11', tex)
+        self.assertIn('Ajouter la vérification', tex)
         run_pipeline(EXAMPLE/'pipeline.json', self.db,self.root/'second',replace=True)
         self.assertEqual((out/'notes.json').read_bytes(),(self.root/'second/notes.json').read_bytes())
         with database(self.db) as c:
@@ -158,7 +159,7 @@ class PipelineTests(unittest.TestCase):
         manifest['evaluation']=str(EXAMPLE/'evaluation.json')
         manifest['corrections'][0]['file']=str(EXAMPLE/'correction_2.json')
         manifest['corrections'][1]['file']='missing.json'
-        path=self.root/'pipeline.json';path.write_text(json.dumps(manifest))
+        path=self.root/'pipeline.json';path.write_text(json.dumps(manifest), encoding='utf-8')
         with self.assertRaises(OSError): run_pipeline(path,self.db,self.root/'out')
         with database(self.db) as c: self.assertEqual(c.execute('SELECT COUNT(*) FROM sujet').fetchone()[0],0)
         self.assertFalse((self.root/'out').exists())
@@ -173,7 +174,7 @@ class PipelineTests(unittest.TestCase):
     def test_strict_json_and_escaping(self):
         p=self.root/'invalid.json'
         for value in ('{"x":1,"x":2}','{"x":NaN}'):
-            p.write_text(value)
+            p.write_text(value, encoding='utf-8')
             with self.assertRaises(ValueError):load_json(p)
         self.assertEqual(tex_escape('50% & x_1'),r'50\% \& x\_1')
     def test_packaged_schema_matches_documented(self):
