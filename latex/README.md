@@ -4,8 +4,8 @@
 Aucun calcul de note n'est délégué à LaTeX. Les fragments de corrigé proviennent de la version
 exacte de l'élève. Utiliser `align*` pour aligner les égalités et les équivalences.
 
-La fiche contient : tableau de trois colonnes interro / groupe / finale, notes des camarades en
-petit, bilan par item et commentaires, annotations avec page, conseils et corrigé. Le dénominateur
+En mode groupe, la fiche contient un tableau de trois colonnes interro / groupe / finale et les
+notes des camarades en petit. En mode individuel, elle affiche une seule note sur 20. Elle présente le bilan par item et commentaires, annotations avec page, conseils et corrigé. Le dénominateur
 s'adapte à la configuration ; 15 + 5 sur 20 est le défaut. Un absent est explicitement identifié.
 Les annotations ne sont pas encore dessinées sur le PDF de la copie originale.
 
@@ -21,3 +21,8 @@ un fragment LaTeX hostile. Ne pas y inclure de préambule, de lecture externe ni
 Les fichiers sont préparés dans un nouveau dossier ; un échec de compilation ne publie pas
 un lot incomplet. Choisir un dossier de sortie neuf pour chaque rendu. Les journaux temporaires
 sont supprimés après succès, et un extrait d'erreur est affiché après échec.
+
+
+Dans l’interface, chaque génération utilise un nouveau dossier local. Les PDF individuels sont
+assemblés par `pypdf` en `corrections.pdf`, ouvert depuis l’écran. Les anciennes sorties restent
+consultables et sont signalées « à régénérer » dès que leurs données ont changé.

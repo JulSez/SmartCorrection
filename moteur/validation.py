@@ -42,7 +42,7 @@ def array(value, where='liste', nonempty=False):
     return value
 
 
-def load_json(path):
+def parse_json(text):
     def pairs(entries):
         result = {}
         for key, value in entries:
@@ -52,4 +52,8 @@ def load_json(path):
         return result
     def invalid(value):
         raise ValueError(f'Nombre JSON interdit : {value}')
-    return json.loads(Path(path).read_text(encoding='utf-8'), object_pairs_hook=pairs, parse_constant=invalid)
+    return json.loads(text, object_pairs_hook=pairs, parse_constant=invalid)
+
+
+def load_json(path):
+    return parse_json(Path(path).read_text(encoding='utf-8'))

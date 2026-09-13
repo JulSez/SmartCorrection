@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf-token" content="__TOKEN__"><title>SmartCorrection</title>
+<link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script>
+</head>
+<body>
+<aside class="sidebar">
+  <a class="brand" href="#"><span class="brand-mark">S<span>c</span></span><span>SmartCorrection<small>L’atelier de correction</small></span></a>
+  <button class="nav-home" id="home-button">▦ &nbsp; Mes évaluations</button>
+  <div id="dossier-nav"></div>
+  <div class="sidebar-foot"><span class="dot"></span> Application locale<small>Vos documents restent sur cet ordinateur.</small></div>
+</aside>
+<div class="shell">
+  <header class="topbar"><span id="breadcrumb">Mes évaluations</span><span class="top-status" id="save-status">Prêt</span></header>
+  <main id="main" tabindex="-1"></main>
+</div>
+<div id="toast" class="toast" role="status" hidden></div>
+<dialog id="modal"><button class="close-modal" id="close-modal" aria-label="Fermer">×</button><div id="modal-content"></div></dialog>
+</body>
+</html>

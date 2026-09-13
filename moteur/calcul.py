@@ -87,3 +87,47 @@ def calculate_notes(db_path, sujet_id):
     with database(db_path) as conn:
         conn.execute('BEGIN IMMEDIATE')
         return calculate(conn, sujet_id)
+
+
+def calculate_selection(conn, sujet_id, copie_ids):
+    """Individual-only preview, including anonymous copies; never relax the full CLI gate."""
+    subject = conn.execute('SELECT * FROM sujet WHERE id=?', (sujet_id,)).fetchone()
+    if not subject:
+        raise ValueError('Sujet inconnu')
+    cfg = config_from_mapping(json.loads(subject['config_notes'] or '{}'))
+    if cfg.groupe_mode != 'aucun' or cfg.note_groupe_max != 0:
+        raise ValueError('Le rendu partiel exige une notation individuelle sans groupe')
+    if not copie_ids or len(set(copie_ids)) != len(copie_ids):
+        raise ValueError('Sélection de copies vide ou répétée')
+    rows = []
+    for cid in copie_ids:
+        integer(cid, 'copie_id')
+        copy = conn.execute('''SELECT c.*,e.numero,e.nom,e.prenom,v.version FROM copie c
+            LEFT JOIN eleve e ON e.id=c.eleve_id LEFT JOIN version v ON v.id=c.version_id
+            WHERE c.id=? AND c.sujet_id=?''', (cid, sujet_id)).fetchone()
+        if not copy:
+            raise ValueError('Copie extérieure à cette évaluation')
+        row = dict(copy, copie_id=cid, camarades=[], groupe=None, correction_id=None,
+                   note_brute=None, bareme_max=None, note_individuelle=None, note_groupe=None, note_finale=None)
+        row['label'] = (f"Élève n° {copy['numero']} - {copy['prenom'] or ''} {copy['nom'] or ''}".strip()
+                        if copy['numero'] is not None else f'Copie {cid} - élève non identifié')
+        if copy['statut'] == 'absent':
+            if cfg.absence == 'zero':
+                row.update(note_individuelle=0., note_groupe=0., note_finale=0.)
+        else:
+            correction = conn.execute('SELECT * FROM correction WHERE copie_id=?', (cid,)).fetchone()
+            if not correction:
+                raise ValueError(f'Copie {cid} non corrigée')
+            grid = conn.execute('SELECT * FROM grille WHERE id=?', (correction['grille_id'],)).fetchone()
+            if not grid['valide'] or grid['sujet_id'] != sujet_id or (grid['version_id'] is not None and grid['version_id'] != copy['version_id']):
+                raise ValueError('Grille incompatible')
+            items = {r['id']: r['bareme_max'] for r in conn.execute('SELECT * FROM item WHERE grille_id=?', (grid['id'],))}
+            scores = conn.execute('SELECT * FROM correction_item WHERE correction_id=?', (correction['id'],)).fetchall()
+            if not items or set(items) != {r['item_id'] for r in scores}:
+                raise ValueError(f'Copie {cid} : correction incomplète')
+            raw, maximum = compute_raw_score((r['points_obtenus'], items[r['item_id']]) for r in scores)
+            individual = min(cfg.note_individuelle_max, _round_step(scale_score(raw, maximum, cfg.note_individuelle_max), cfg.individuel_arrondi, cfg.arrondi_mode))
+            row.update(correction_id=correction['id'], grille_id=grid['id'], note_brute=raw, bareme_max=maximum,
+                       note_individuelle=individual, note_groupe=0., note_finale=compute_final_note(individual, 0, cfg))
+        rows.append(row)
+    return {'sujet': dict(subject), 'config': json.loads(subject['config_notes'] or '{}'), 'notes': rows}

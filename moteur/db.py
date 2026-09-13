@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB = Path('db/smartcorrection.sqlite')
 SCHEMA = Path(__file__).with_name('schema.sql')
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 V3_SCHEMA = r'''
 CREATE TABLE IF NOT EXISTS copie_page (
@@ -181,6 +181,7 @@ ALTER TABLE item_new RENAME TO item;
         script = 'BEGIN IMMEDIATE;\n' + migration + base_schema
         if version < 4:
             script += '\n' + V4_SCHEMA + '\n' + base_schema
+        script += '\n' + Path(__file__).with_name('gui_schema.sql').read_text(encoding='utf-8')
         conn.executescript(script)
         errors = conn.execute('PRAGMA foreign_key_check').fetchall()
         if errors:
