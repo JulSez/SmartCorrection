@@ -84,12 +84,17 @@ def import_evaluation(data, conn, base_dir=Path('.'), check_pdfs=False):
         if 'total_points' in grid and abs(number(grid['total_points']) - total) > 1e-9:
             raise ValueError('total_points diffère de la somme des items')
         conn.execute('UPDATE grille SET total_points=? WHERE id=?', (total, gid))
-    pupils = {}
+
+    pupils = {row['numero']: row['id'] for row in conn.execute(
+        'SELECT id,numero FROM eleve WHERE classe=?', (classe,)
+    )}
+    declared = set()
     for pupil in array(data.get('eleves', []), 'eleves'):
         object_fields(pupil, {'numero', 'nom', 'prenom'}, {'numero'})
         num = integer(pupil['numero'], 'numero élève')
-        if num in pupils:
+        if num in declared:
             raise ValueError(f'Élève répété : {num}')
+        declared.add(num)
         _optional_text(pupil, ('nom', 'prenom'))
         conn.execute('INSERT INTO eleve(classe,numero,nom,prenom) VALUES(?,?,?,?) ON CONFLICT(classe,numero) DO NOTHING',
                      (classe, num, pupil.get('nom'), pupil.get('prenom')))
@@ -99,7 +104,7 @@ def import_evaluation(data, conn, base_dir=Path('.'), check_pdfs=False):
         num = integer(copy['numero'], 'numero copie')
         version = string(copy['version'])
         if num not in pupils or version not in versions:
-            raise ValueError('Copie : élève ou version non déclaré')
+            raise ValueError('Copie : élève ou version non déclaré/importé dans la classe')
         status = copy.get('statut', 'present')
         if not isinstance(status, str) or status not in {'present', 'absent'}:
             raise ValueError('Statut de copie invalide')
@@ -120,7 +125,7 @@ def import_evaluation(data, conn, base_dir=Path('.'), check_pdfs=False):
         for num in array(group['eleves'], 'membres', True):
             integer(num, 'numéro membre')
             if num not in pupils:
-                raise ValueError(f'Membre non déclaré : {num}')
+                raise ValueError(f'Membre non déclaré/importé dans la classe : {num}')
             conn.execute('INSERT INTO groupe_eleve(groupe_id,eleve_id) VALUES(?,?)', (gid, pupils[num]))
     conn.execute('INSERT INTO evaluation_import VALUES(?,?,?)', (key, digest, subject_id))
     return subject_id
