@@ -32,10 +32,11 @@ class MigrationTests(unittest.TestCase):
         init_db(self.db);init_db(self.db)
         with database(self.db) as conn:
             self.assertEqual(conn.execute('PRAGMA foreign_key_check').fetchall(),[])
-            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],2)
+            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],3)
             self.assertEqual(conn.execute('SELECT points_obtenus FROM correction_item').fetchone()[0],12)
             self.assertEqual(conn.execute('SELECT texte FROM conseil').fetchone()[0],'Vérifier')
             self.assertEqual(conn.execute('SELECT grille_id FROM item').fetchone()[0],1)
+            self.assertIsNotNone(conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='copie_page'").fetchone())
         with self.assertRaises(ValueError):calculate_notes(self.db,1)
         with database(self.db) as conn:conn.execute('UPDATE grille SET valide=1 WHERE id=1')
         self.assertEqual(calculate_notes(self.db,1)['notes'][0]['note_finale'],12)
