@@ -15,6 +15,14 @@ from .render import export_results
 from .validation import array, integer, load_json, object_fields, string
 
 
+def _configure_utf8_stdio():
+    """Keep CLI JSON/error output Unicode-safe, including redirected PowerShell output."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, 'reconfigure', None)
+        if reconfigure is not None:
+            reconfigure(encoding='utf-8')
+
+
 def run_pipeline(manifest_path, db_path, output, pdf=False, replace=False, check_pdfs=False):
     path = Path(manifest_path).resolve()
     manifest = object_fields(load_json(path), {'evaluation', 'corrections'}, {'evaluation', 'corrections'})
@@ -122,6 +130,7 @@ def build_parser():
 
 
 def main(argv=None):
+    _configure_utf8_stdio()
     args = build_parser().parse_args(argv)
     try:
         command = args.command
