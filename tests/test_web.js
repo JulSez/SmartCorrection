@@ -5,6 +5,17 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync(require('node:path').join(__dirname, '../moteur/web/app.js'), 'utf8');
 
+test('group editor is optional and shows local identities and missing groups',()=>{
+ const h=harness();
+ assert.doesNotMatch(h.run('groupsPanel()'),/id="groups-active" checked/);
+ h.run("state.groupes={actif:true,membres:[{numero_groupe:1,numero:2,nom:'Local',prenom:'Alice'}],sans_groupe:[3]}");
+ const html=h.run('groupsPanel()');
+ assert.match(html,/id="groups-active" checked/);
+ assert.match(html,/2 — Alice Local/);
+ assert.match(html,/Sans groupe : 3/);
+ assert.match(html,/Enregistrer les groupes/);
+});
+
 function harness() {
   const nodes = new Map();
   const node = selector => {

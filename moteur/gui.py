@@ -118,6 +118,7 @@ def dispatch(app,data):
             raise ValueError('La grille a changé ; recharger le dossier')
         return app.corrige(ident,data['version'],data['texte'],commit)
     if action=='echantillon': return app.sample(ident,data['references'],commit)
+    if action=='groupes': return app.groups(ident,data.get('actif'),data.get('texte'))
     if action=='revue': return app.review(ident,data['reference'])
     if action=='generer': return app.generate(ident,final=data.get('final',False),pdf=data.get('pdf',True))
     raise ValueError('Action inconnue')

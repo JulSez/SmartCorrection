@@ -38,7 +38,7 @@ def make_prompt(app, ident, stage, version=None, mode='echantillon'):
                 policies.append(f"Consignes {r['portee']} :\n{r['texte']}")
         previous_grid=conn.execute("SELECT texte FROM ui_echange WHERE dossier_id=? AND etape='grille' ORDER BY id DESC LIMIT 1",(ident,)).fetchone()
     prefix=f"SmartCorrection — {d['titre']} — classe {d['classe']}\nDossier : {ident}. Révision de grille : {d['revision']}.\n"
-    prefix+='Tu échanges avec l’enseignant dans cette conversation. Les décisions explicites de cette évaluation prévalent. La notation de ce parcours est individuelle, sans groupe. Les calculs de totaux et la conversion sur 20 seront faits par l’application.\n\n'
+    prefix+='Tu échanges avec l’enseignant dans cette conversation. Les décisions explicites de cette évaluation prévalent. Attribue uniquement les points par item. Les totaux, conversions et éventuelles notes de groupe seront calculés localement par l’application.\n\n'
     prefix+='\n\n'.join(policies)+'\n\n'
     # Never include the class roster, pupil numbers or uploaded filenames in prompts.
     # Filenames may themselves contain pupils' names; document roles are sufficient.

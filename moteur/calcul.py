@@ -89,14 +89,12 @@ def calculate_notes(db_path, sujet_id):
         return calculate(conn, sujet_id)
 
 
-def calculate_selection(conn, sujet_id, copie_ids):
+def _selection_individuals(conn, sujet_id, copie_ids):
     """Individual-only preview, including anonymous copies; never relax the full CLI gate."""
     subject = conn.execute('SELECT * FROM sujet WHERE id=?', (sujet_id,)).fetchone()
     if not subject:
         raise ValueError('Sujet inconnu')
     cfg = config_from_mapping(json.loads(subject['config_notes'] or '{}'))
-    if cfg.groupe_mode != 'aucun' or cfg.note_groupe_max != 0:
-        raise ValueError('Le rendu partiel exige une notation individuelle sans groupe')
     if not copie_ids or len(set(copie_ids)) != len(copie_ids):
         raise ValueError('Sélection de copies vide ou répétée')
     rows = []
@@ -131,3 +129,57 @@ def calculate_selection(conn, sujet_id, copie_ids):
                        note_individuelle=individual, note_groupe=0., note_finale=compute_final_note(individual, 0, cfg))
         rows.append(row)
     return {'sujet': dict(subject), 'config': json.loads(subject['config_notes'] or '{}'), 'notes': rows}
+
+
+
+def calculate_selection(conn, sujet_id, copie_ids, *, allow_groups=False):
+    """Compute peers from the whole subject, not merely the sample being rendered."""
+    subject = conn.execute('SELECT config_notes FROM sujet WHERE id=?', (sujet_id,)).fetchone()
+    if not subject:
+        raise ValueError('Sujet inconnu')
+    cfg = config_from_mapping(json.loads(subject[0]))
+    grouped = cfg.groupe_mode != 'aucun' and cfg.note_groupe_max > 0
+    if grouped and not allow_groups:
+        raise ValueError('Le rendu partiel exige une notation individuelle sans groupe')
+    result = _selection_individuals(conn, sujet_id, copie_ids)
+    if not grouped:
+        return result
+    cache = {r['copie_id']: r for r in result['notes']}
+    for row in result['notes']:
+        row.update(note_groupe=None, note_finale=None, etat_groupe=None)
+        if row['statut'] == 'absent':
+            continue
+        groups = conn.execute('''SELECT g.id,g.numero_groupe FROM groupe g JOIN groupe_eleve ge ON ge.groupe_id=g.id
+            WHERE g.sujet_id=? AND ge.eleve_id=?''', (sujet_id,row['eleve_id'])).fetchall()
+        if len(groups) > 1:
+            raise ValueError('Élève présent dans plusieurs groupes')
+        if not groups:
+            row['etat_groupe'] = 'À traiter : élève sans groupe ou non identifié'
+            continue
+        group = groups[0]
+        row['groupe'] = group['numero_groupe']
+        pending = False
+        for peer in conn.execute('''SELECT e.numero,c.id,c.statut,co.id correction_id,u.a_revoir
+            FROM groupe_eleve ge JOIN eleve e ON e.id=ge.eleve_id
+            LEFT JOIN copie c ON c.eleve_id=e.id AND c.sujet_id=?
+            LEFT JOIN correction co ON co.copie_id=c.id LEFT JOIN ui_copie u ON u.copie_id=c.id
+            WHERE ge.groupe_id=? AND ge.eleve_id<>? ORDER BY e.numero''', (sujet_id,group['id'],row['eleve_id'])):
+            score = None
+            if peer['statut'] != 'absent':
+                if not peer['correction_id'] or peer['a_revoir']:
+                    pending = True
+                else:
+                    if peer['id'] not in cache:
+                        cache[peer['id']] = _selection_individuals(conn,sujet_id,[peer['id']])['notes'][0]
+                    score = cache[peer['id']]['note_individuelle']
+            row['camarades'].append({'numero':peer['numero'],'statut':peer['statut'] or 'non repérée','note_individuelle':score})
+        values = [p['note_individuelle'] for p in row['camarades']
+                  if p['statut'] != 'absent' and p['note_individuelle'] is not None]
+        if pending:
+            row['etat_groupe'] = 'En attente : camarade non corrigé ou à revoir'
+        elif not values:
+            row['etat_groupe'] = 'À traiter : aucun camarade disponible'
+        else:
+            row['note_groupe'] = compute_group_score(values,cfg)
+            row['note_finale'] = compute_final_note(row['note_individuelle'],row['note_groupe'],cfg)
+    return result

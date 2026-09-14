@@ -146,9 +146,24 @@ def render_student(student, subject, cfg):
              r'\rowcolor{SCpale}\textbf{'+f'Note (/{fmt(cfg.note_finale_max)})'+r'} & \textcolor{SCblue}{\textbf{'+fmt(student['note_finale'])+r'}}\\\hline',
              r'\end{tabular}\par']
     if not individual_only:
-        peers = '; '.join(f"n° {p['numero']} : {fmt(p['note_individuelle'])}" + (' (absent)' if p['statut']=='absent' else '') for p in student['camarades']) or 'Aucun camarade'
-        lines += [r'{\small '+esc(f"Note interro : {fmt(student['note_individuelle'])}/{fmt(cfg.note_individuelle_max)} ; Note groupe : {fmt(student['note_groupe'])}/{fmt(cfg.note_groupe_max)}.")+r'\par',
-                  esc(peers+f' (/{fmt(cfg.note_individuelle_max)})')+r'\par}']
+        lines = lines[:-3]
+        score = lambda value: fmt(round(value, 2)) if value is not None else fmt(None)
+        peers = r'\newline '.join(esc(f"n° {p['numero']} : " + (
+            'absent' if p['statut']=='absent' else
+            f"{score(p['note_individuelle'])}/{fmt(cfg.note_individuelle_max)}" if p['note_individuelle'] is not None else 'en attente'))
+            for p in student['camarades']) or esc('Aucun camarade')
+        pending = student.get('etat_groupe')
+        group_note = esc('En attente' if pending and pending.startswith('En attente') else 'À traiter') if pending else score(student['note_groupe'])
+        final_note = '--' if pending else fmt(student['note_finale'])
+        col = r'>{\centering\arraybackslash}p{\dimexpr.333333\linewidth-2\tabcolsep-1.333333\arrayrulewidth\relax}'
+        lines += [r'\begin{tabular}{|'+col+'|'+col+'|'+col+r'|}\hline',
+                  r'\rowcolor{SCpale}\textbf{Individuelle /'+fmt(cfg.note_individuelle_max)+
+                  r'} & \textbf{Groupe /'+fmt(cfg.note_groupe_max)+r'} & \textbf{Finale /'+fmt(cfg.note_finale_max)+r'}\\\hline',
+                  score(student['note_individuelle'])+' & '+group_note+r'\newline {\scriptsize '+peers+
+                  r'} & \textcolor{SCblue}{\textbf{'+final_note+r'}}\\\hline',
+                  r'\end{tabular}\par']
+        if pending:
+            lines += [r'{\small '+esc(pending)+r'\par}']
     if student['statut'] == 'absent':
         lines += [r'\par\textbf{Absence déclarée.}']
     else:
@@ -292,12 +307,12 @@ def export_results(conn, result, output, pdf=False, combined=False):
         students = [build_student_data(conn, result, row) for row in result['notes']]
         payload = dict(result, fiches=students)
         (stage/'notes.json').write_text(json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False)+'\n', encoding='utf-8')
-        fields = ['copie_id','numero','statut','groupe','note_brute','bareme_max','note_individuelle','note_groupe','note_finale','camarades']
+        fields = ['copie_id','numero','statut','groupe','note_brute','bareme_max','note_individuelle','note_groupe','note_finale','camarades','etat_groupe']
         with (stage/'notes.csv').open('w', newline='', encoding='utf-8-sig') as f:
             writer = csv.DictWriter(f, fields, delimiter=';')
             writer.writeheader()
             for student in students:
-                row = {k: student[k] for k in fields}
+                row = {k: student.get(k) for k in fields}
                 row['camarades'] = ' | '.join(f"{p['numero']}: {fmt(p['note_individuelle'])}" for p in student['camarades'])
                 writer.writerow(row)
         pdf_paths = []

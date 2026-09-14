@@ -15,6 +15,7 @@ from .import_classe import _read_roster, import_classe_csv
 from .import_evaluation import import_evaluation
 from .import_correction import import_correction, compatible_grid
 from .calcul import calculate_selection
+from .gui_groups import group_state, save_groups, copy_groups
 from .render import export_results
 from .validation import array, integer, number, object_fields, parse_json, string
 
@@ -99,6 +100,11 @@ class Application:
             rows.append(item)
         return rows
 
+    def groups(self, ident, active, text):
+        with database(self.db_path) as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            return save_groups(conn,self._dossier(conn,ident),active,text,INDIVIDUAL)
+
     def home(self):
         with database(self.db_path) as conn:
             return {'classes': [dict(r) for r in conn.execute('SELECT classe,COUNT(*) effectif FROM eleve GROUP BY classe ORDER BY classe')],
@@ -116,7 +122,7 @@ class Application:
                     q.numero question,e.numero exercice,v.version FROM item i JOIN question q ON q.id=i.question_id
                     JOIN exercice e ON e.id=q.exercice_id JOIN grille g ON g.id=i.grille_id
                     LEFT JOIN version v ON v.id=g.version_id WHERE g.sujet_id=? ORDER BY g.id,e.ordre,q.ordre,i.ordre''', (dossier['sujet_id'],))]
-            return {'dossier': dict(dossier), 'copies': self._copies(conn, dossier), 'grille': grids, 'versions': versions,
+            return {'dossier': dict(dossier), 'groupes': group_state(conn,dossier), 'copies': self._copies(conn, dossier), 'grille': grids, 'versions': versions,
                     'eleves': [dict(r) for r in conn.execute('SELECT numero,nom,prenom FROM eleve WHERE classe=? ORDER BY numero', (dossier['classe'],))],
                     'fichiers': [dict(r) for r in conn.execute('SELECT id,role,nom,pages FROM ui_fichier WHERE dossier_id=?', (ident,))],
                     'brouillons': {r['etape']: r['texte'] for r in conn.execute('SELECT * FROM ui_brouillon WHERE dossier_id=?', (ident,))},
@@ -233,6 +239,7 @@ class Application:
                       'sujet': {'classe': dossier['classe'], 'titre': dossier['titre'], 'config_notes': INDIVIDUAL},
                       'versions': versions, 'grilles': [dict(g,validee=True) for g in grids]}
         sid = import_evaluation(evaluation, conn)
+        copy_groups(conn,dossier['sujet_id'],sid)
         # Preserve the original subjects/corrections, create a new revision using stable public references.
         copies = self._copies(conn,dossier)
         version_ids = {r['version']: r['id'] for r in conn.execute('SELECT * FROM version WHERE sujet_id=?', (sid,))}
@@ -446,7 +453,7 @@ class Application:
             copy=next((c for c in self._copies(conn,dossier) if c['reference']==reference),None)
             if not copy or not copy['correction_id']:
                 raise ValueError('Une correction complète est nécessaire avant confirmation')
-            calculate_selection(conn,dossier['sujet_id'],[copy['copie_id']])
+            calculate_selection(conn,dossier['sujet_id'],[copy['copie_id']],allow_groups=True)
             conn.execute('UPDATE ui_copie SET a_revoir=NULL WHERE dossier_id=? AND reference=?',(ident,reference))
             self._record(conn,dossier,'revue',{'reference':reference})
         return {'verifiee':reference}
@@ -463,7 +470,7 @@ class Application:
             for copy in selected:
                 if copy['a_revoir']:
                     raise ValueError(f"{copy['reference']} reste à revoir : {copy['a_revoir']}")
-            result=calculate_selection(conn,dossier['sujet_id'],[c['copie_id'] for c in selected])
+            result=calculate_selection(conn,dossier['sujet_id'],[c['copie_id'] for c in selected],allow_groups=True)
             labels={c['copie_id']:c['reference'] for c in selected}
             for row in result['notes']:
                 if row['numero'] is None:
