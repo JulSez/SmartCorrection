@@ -79,7 +79,7 @@ class GuiPdfTests(unittest.TestCase):
         bad = next(s for s in data['fiches'] if s['version']=='B')
         tex = fixture.root/'broken.tex'
         tex.write_text(render_student(bad, data['sujet'], config_from_mapping(data['config'])), encoding='utf-8')
-        with self.assertRaisesRegex(RuntimeError, 'LaTeX'):
+        with self.assertRaisesRegex(RuntimeError, 'Compilation échouée : broken.tex'):
             compile_pdf(tex)
         fixture.app.include_in_final(fixture.ident, 'C006', False)
         final = fixture.app.generate(fixture.ident, final=True, pdf=True)
