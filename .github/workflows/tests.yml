@@ -15,7 +15,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install ".[gui]"
       - run: python -m unittest discover -s tests -v
-      - run: node --test tests/test_web.js
+      - run: node --test tests/test_web.js tests/test_workflow_v2_web.js
       - run: smartcorrection run examples/tmex_demo/pipeline.json --db db/demo.sqlite --output exports/demo
   pdf:
     runs-on: ubuntu-latest
@@ -26,7 +26,7 @@ jobs:
           python-version: '3.12'
       - run: sudo apt-get update && sudo apt-get install -y texlive-latex-base texlive-latex-recommended texlive-fonts-recommended texlive-lang-french lmodern
       - run: python -m pip install ".[gui]"
-      - run: python -m unittest discover -s tests -p 'test_gui*.py' -v
+      - run: python -m unittest discover -s tests -v
         env:
           SMARTCORRECTION_TEST_PDF: "1"
       - run: python -m moteur run examples/tmex_demo/pipeline.json --db db/demo.sqlite --output exports/demo --pdf
