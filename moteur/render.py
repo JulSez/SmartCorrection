@@ -119,9 +119,6 @@ def render_student(student, subject, cfg):
     lines = ['% SmartCorrection: paired-a6-v1',
              r'\documentclass[10pt]{article}', r'\usepackage[utf8]{inputenc}',
              r'\usepackage[T1]{fontenc}', r'\usepackage{lmodern,textcomp}', r'\IfFileExists{french.ldf}{\usepackage[french]{babel}}{}', r'\usepackage{amsmath,amssymb,longtable,array}',
-             # Do not load xcolor with the table option here. That option loads
-             # colortbl, whose patches for longtable differ across MiKTeX releases
-             # and can make \hline fail before any student data is typeset.
              r'\usepackage{xcolor}',
              r'\usepackage[paperwidth=105mm,paperheight=148mm,margin=6mm,bottom=9mm,footskip=4mm]{geometry}',
              r'\definecolor{SCblue}{HTML}{245A81}',
@@ -201,13 +198,70 @@ def render_student(student, subject, cfg):
     return '\n'.join(lines)
 
 
+def _sort_text(value):
+    text = unicodedata.normalize('NFKD', str(value or '')).casefold()
+    return ''.join(c for c in text if not unicodedata.combining(c))
+
+
+def alphabetical_student_key(student):
+    """Identified pupils by surname/given name; anonymous copies come last."""
+    anonymous = not (student.get('nom') or student.get('prenom'))
+    return (anonymous, _sort_text(student.get('nom')), _sort_text(student.get('prenom')),
+            student.get('eleve_id') or 0, student.get('copie_id') or 0)
+
+
+def render_grade_sheet(students, subject, cfg):
+    """Teacher-facing alphabetical grade register for the final document."""
+    esc = latex_escape_plain_text
+    grouped = cfg.groupe_mode != 'aucun' and cfg.note_groupe_max > 0
+
+    def score(student, key):
+        if student.get('statut') == 'absent':
+            return 'ABS'
+        if student.get('etat_groupe') and key in {'note_groupe', 'note_finale'}:
+            return '--'
+        value = student.get(key)
+        return '--' if value is None else fmt(round(value, 2))
+
+    lines = [r'\documentclass[10pt,a4paper]{article}', r'\usepackage[utf8]{inputenc}',
+             r'\usepackage[T1]{fontenc}', r'\usepackage{lmodern,textcomp}',
+             r'\IfFileExists{french.ldf}{\usepackage[french]{babel}}{}',
+             r'\usepackage{longtable,array,xcolor}', r'\usepackage[margin=15mm]{geometry}',
+             r'\definecolor{SCblue}{HTML}{245A81}', r'\setlength{\parindent}{0pt}',
+             r'\setlength{\tabcolsep}{4pt}', r'\renewcommand{\arraystretch}{1.25}',
+             r'\begin{document}', r'{\Large\bfseries\color{SCblue} Relevé des notes}\par\vspace{1mm}',
+             r'{\bfseries '+esc(subject.get('titre') or 'Évaluation')+r'}\hfill '+esc(subject.get('classe') or '')+r'\par\vspace{4mm}']
+    if grouped:
+        lines += [r'\begin{longtable}{|p{.25\linewidth}|p{.20\linewidth}|>{\centering\arraybackslash}p{.14\linewidth}|>{\centering\arraybackslash}p{.14\linewidth}|>{\centering\arraybackslash}p{.14\linewidth}|}\hline',
+                  r'\textcolor{SCblue}{\textbf{Nom}} & \textcolor{SCblue}{\textbf{Prénom}} & '
+                  r'\textcolor{SCblue}{\textbf{Indiv. /'+fmt(cfg.note_individuelle_max)+r'}} & '
+                  r'\textcolor{SCblue}{\textbf{Groupe /'+fmt(cfg.note_groupe_max)+r'}} & '
+                  r'\textcolor{SCblue}{\textbf{Finale /'+fmt(cfg.note_finale_max)+r'}}\\\hline\endhead']
+    else:
+        lines += [r'\begin{longtable}{|p{.38\linewidth}|p{.38\linewidth}|>{\centering\arraybackslash}p{.16\linewidth}|}\hline',
+                  r'\textcolor{SCblue}{\textbf{Nom}} & \textcolor{SCblue}{\textbf{Prénom}} & '
+                  r'\textcolor{SCblue}{\textbf{Note /'+fmt(cfg.note_finale_max)+r'}}\\\hline\endhead']
+    for student in sorted(students, key=alphabetical_student_key):
+        if student.get('nom') or student.get('prenom'):
+            surname, given = student.get('nom') or '', student.get('prenom') or ''
+        else:
+            surname = student.get('label') or f"Copie {student.get('copie_id', '?')}"
+            given = 'Non identifié'
+        if grouped:
+            lines.append(esc(surname)+' & '+esc(given)+' & '+score(student, 'note_individuelle')+' & '+
+                         score(student, 'note_groupe')+' & '+score(student, 'note_finale')+r'\\\hline')
+        else:
+            lines.append(esc(surname)+' & '+esc(given)+' & '+score(student, 'note_finale')+r'\\\hline')
+    lines += [r'\end{longtable}', r'\end{document}', '']
+    return '\n'.join(lines)
+
+
 def compile_pdf(tex_path, timeout=60):
     engine = shutil.which('pdflatex')
     if not engine:
         raise RuntimeError('pdflatex introuvable ; installer TeX Live avec le français ou omettre --pdf')
     tex_path = Path(tex_path).resolve()
     paired = tex_path.read_text(encoding='utf-8').startswith('% SmartCorrection: paired-a6-v1\n')
-    # Never let the LaTeX output and the imposed PDF share a filename.
     jobname = tex_path.stem + '.a6' if paired else tex_path.stem
     env = dict(os.environ, openin_any='p', openout_any='p')
     for _ in range(2):
@@ -328,12 +382,17 @@ def export_results(conn, result, output, pdf=False, combined=False):
             from pypdf import PdfWriter
             writer = PdfWriter()
             try:
-                # Only publish final student PDFs, never an intermediate A6 document.
                 for path in sorted(pdf_paths):
                     writer.append(str(path))
                 writer.write(str(stage/'corrections.pdf'))
             finally:
                 writer.close()
+        # Final GUI exports carry copies_exclues. Alongside corrections.pdf, publish
+        # a teacher-facing grade register ordered by surname then given name.
+        if pdf and 'copies_exclues' in result:
+            grade_path = stage/'notes.tex'
+            grade_path.write_text(render_grade_sheet(students, result['sujet'], cfg), encoding='utf-8')
+            compile_pdf(grade_path)
         manifest = {'format_version': 1, 'sujet_id': result['sujet']['id'], 'pdf': pdf,
                     'files': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(stage.iterdir()) if p.suffix in {'.json','.csv','.tex','.pdf','.md'} and not p.name.endswith('.a6.pdf')}}
         (stage/'manifest.json').write_text(json.dumps(manifest, indent=2)+'\n', encoding='utf-8')
@@ -345,8 +404,6 @@ def export_results(conn, result, output, pdf=False, combined=False):
         try:
             _retry_locked(lambda: shutil.rmtree(stage))
         except OSError as cleanup_error:
-            # In particular, Windows may deny deletion of a file still open elsewhere.
-            # Keep the actual compilation/export error instead of replacing it with this one.
             exc.add_note(f'Nettoyage temporaire impossible ({stage}) : {cleanup_error}')
         raise
     return output
