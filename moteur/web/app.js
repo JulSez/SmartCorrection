@@ -85,21 +85,36 @@ function renderReference(){
  $('#main').innerHTML=intro+tabs+'<div class="reference-editor">'+exchangePanel('corrige:'+referenceVersion,'Corrigé LaTeX — version '+esc(referenceVersion),'Collez le corrigé LaTeX complet, sans préambule ni début / fin de document.')+'</div>';
  document.querySelectorAll('[data-version]').forEach(b=>b.onclick=()=>{referenceVersion=b.dataset.version;renderDossier();});
 }
+function groupsPanel(){
+ const g=state.groupes||{actif:false,membres:[],sans_groupe:[]}, groups=new Map();
+ for(const m of g.membres){if(!groups.has(m.numero_groupe))groups.set(m.numero_groupe,[]);groups.get(m.numero_groupe).push(m);}
+ const text=[...groups.values()].map(ms=>ms.map(m=>m.numero).join(', ')).join('\n');
+ return `<details class="card" ${g.actif?'open':''}><summary>Note de groupe · Maths expertes ${g.actif?'activée':'facultative'}</summary><p>Individuelle /15 + moyenne des autres camarades /5 = finale /20. Les absents sont exclus ; les notes incomplètes restent en attente.</p><label><input type="checkbox" id="groups-active" ${g.actif?'checked':''}> Activer la note de groupe</label><label for="groups-text">Un groupe par ligne · numéros des élèves</label><textarea id="groups-text" style="min-height:110px" placeholder="2, 31, 3, 22&#10;20, 25, 11, 27">${esc(text)}</textarea><button id="save-groups">Enregistrer les groupes</button><div id="groups-error" role="alert"></div>${table(['Groupe','Élèves'],[...groups].map(([n,ms])=>[n,ms.map(m=>m.numero+' — '+m.prenom+' '+m.nom).join(', ')]))}${g.actif&&g.sans_groupe.length?'<p class="notice warning">Sans groupe : '+esc(g.sans_groupe.join(', '))+'. Leur note finale restera à traiter.</p>':''}<p class="help">Ces identités et groupes restent dans l’application, jamais dans la consigne IA. Les PDF existants seront à régénérer.</p></details>`;
+}
+function bindGroups(){
+ if(!$('#save-groups'))return;
+ $('#save-groups').onclick=()=>task(async()=>{
+  try{await post({action:'groupes',dossier:state.dossier.id,actif:$('#groups-active').checked,texte:$('#groups-text').value});
+   state=await get('/api/dossier?id='+state.dossier.id);renderDossier();toast('Groupes enregistrés. Les notes seront recalculées au prochain rendu.');
+  }catch(e){$('#groups-error').innerHTML='<div class="error">'+esc(e.message)+'</div>';throw e;}
+ });
+}
 function renderInventory(){
  $('#main').innerHTML=header('Repérer les copies','Demandez à l’IA de repérer les copies du paquet, puis collez sa réponse à droite.')+
  (!state.dossier.revision?'<div class="notice warning">Validez d’abord la grille et ses versions.</div>':'')+exchangePanel('copies','Inventaire au format JSON')+
- (state.copies.length?`<div class="card"><h2>Copies enregistrées</h2>${copyTable(state.copies,false)}</div>`:'');
+ (state.copies.length?`<div class="card"><h2>Copies enregistrées</h2>${copyTable(state.copies,false)}</div>`:'')+(state.dossier.revision?groupsPanel():'');
+ bindGroups();
 }
 function copyTable(copies,select){return `<div class="table-wrap"><table><thead><tr>${select?'<th>Test</th>':''}<th>Copie</th><th>Élève</th><th>Pages</th><th>Version</th><th>État</th></tr></thead><tbody>${copies.map(c=>`<tr>${select?`<td>${c.statut==='present'?`<input type="checkbox" aria-label="Sélectionner ${esc(c.reference)}" data-sample="${esc(c.reference)}" ${c.echantillon?'checked':''}>`:''}</td>`:''}<td>${esc(c.reference)}</td><td>${c.numero!==null?esc('N° '+c.numero+' — '+(c.prenom||'')+' '+(c.nom||'')):'<span class="badge warn">Non identifié</span>'}</td><td>${esc(c.pages.join(', '))}</td><td>${esc(c.version)}</td><td>${c.a_revoir?`<span class="badge warn">À revoir</span><small>${esc(c.a_revoir)}</small>${c.correction_id?`<button class="tiny" data-review="${esc(c.reference)}">J’ai vérifié cette correction</button>`:''}`:c.statut==='absent'?'Absent':c.correction_id?'<span class="badge ok">Corrigée</span>':'À corriger'}</td></tr>`).join('')}</tbody></table></div>`;}
 function renderCorrection(rest){
  correctionMode=rest?'reste':'echantillon';const present=state.copies.filter(c=>c.statut==='present');const done=present.filter(c=>c.correction_id&&!c.a_revoir).length;const review=present.filter(c=>c.a_revoir).length;
  $('#main').innerHTML=header(rest?'Corriger le reste':'Tester la correction',rest?'Demandez la correction de toutes les copies restantes. Vous pouvez importer plusieurs réponses, chacune contenant des copies complètes.':'Choisissez jusqu’à cinq copies, vérifiez les fiches puis ajustez avec l’IA jusqu’à être satisfait.')+
  `<div class="metrics"><div class="metric"><strong>${present.length}</strong><span>copies repérées</span></div><div class="metric"><strong>${done}</strong><span>corrigées</span></div><div class="metric"><strong>${review}</strong><span>à revoir</span></div><div class="metric"><strong>${present.length-done-review}</strong><span>restantes</span></div></div>`+
- (rest&&!state.dossier.echantillon_valide?'<div class="notice warning">Terminez la correction de l’échantillon, puis passez à l’étape suivante pour la valider.</div>':'')+
+ groupsPanel()+(rest&&!state.dossier.echantillon_valide?'<div class="notice warning">Terminez la correction de l’échantillon, puis passez à l’étape suivante pour la valider.</div>':'')+
  `<div class="card"><h2>${rest?'Suivi du paquet':'Copies de l’échantillon'}</h2>${copyTable(state.copies,!rest)}${!rest?'<div class="actions"><button id="save-sample">Enregistrer la sélection</button></div>':''}</div>`+exchangePanel('correction','Corrections au format JSON')+
  `<div class="card"><h2>${rest?'Document final':'Vérifier les fiches'}</h2><p class="help">Relisez les fiches après avoir enregistré les corrections.${rest?'':' Passer à l’étape suivante valide l’échantillon.'}</p><div class="actions"><button class="primary" id="generate-pdf">${rest?'Créer le PDF final':'Voir les fiches du test'}</button></div><div id="render-error"></div><details class="more-options"><summary>Plus d’options</summary><button id="generate-tex">Exporter les sources LaTeX</button>${renderLinks()}</details></div>`;
  if($('#save-sample'))$('#save-sample').onclick=()=>task(async()=>{await post({action:'echantillon',dossier:state.dossier.id,references:sampleRefs()});state=await get('/api/dossier?id='+state.dossier.id);renderDossier();toast('Sélection enregistrée.');});
- $('#generate-pdf').onclick=()=>generate(rest,true);$('#generate-tex').onclick=()=>generate(rest,false);
+ $('#generate-pdf').onclick=()=>generate(rest,true);$('#generate-tex').onclick=()=>generate(rest,false);bindGroups();
  if(!rest)document.querySelectorAll('[data-sample]').forEach(box=>box.onchange=()=>{for(const id of ['copy-prompt','check-response','save-response','generate-pdf','generate-tex'])$('#'+id).disabled=true;$('#prompt').dataset.cancelled='1';$('#prompt').value='';$('#prompt').placeholder='Enregistrez la sélection pour afficher la consigne actualisée.';toast('Enregistrez la sélection avant de copier la consigne ou de voir les fiches.');});
  document.querySelectorAll('[data-review]').forEach(b=>b.onclick=()=>task(async()=>{await post({action:'revue',dossier:state.dossier.id,reference:b.dataset.review});state=await get('/api/dossier?id='+state.dossier.id);renderDossier();}));
 }

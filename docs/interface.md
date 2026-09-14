@@ -290,7 +290,31 @@ joints à ce premier parcours doivent être des PDF. Les variantes de notation e
 accessibles dans le moteur CLI. Les tests utilisent des évaluations **fictives** : la relecture
 d’un paquet réel, du rendu et du parcours Windows reste une étape de validation enseignant.
 
-### Boutons et lecture du parcours
+### Note de groupe Maths expertes
+
+Dans **Repérer les copies**, ouvrir **Note de groupe · Maths expertes** après avoir enregistré la grille.
+Le même panneau est accessible dans **Tester la correction** et **Corriger le reste**.
+L’option est désactivée par défaut. Cocher **Activer la note de groupe**, coller une ligne de numéros
+par groupe (`2, 31, 3, 22`), puis **Enregistrer les groupes**. Le tableau affiche les identités locales ;
+les doublons et numéros inconnus sont refusés sans modifier les groupes enregistrés. Les élèves
+sans groupe sont signalés. Les groupes ne sont jamais ajoutés aux consignes IA.
+
+La note individuelle est convertie sur 15 ; la moyenne des **autres membres** est convertie sur 5.
+La finale est leur somme sur 20, arrondie au demi-point comme dans le moteur existant. Les absents
+sont exclus de la moyenne. Une copie non corrigée, non repérée ou à revoir laisse la part groupe
+et la finale en attente. Sans camarade disponible ou sans identité/groupe, elles restent « À traiter ».
+Le test sur cinq copies utilise aussi les camarades hors échantillon, sans inventer leurs notes.
+
+Les fiches A5 paysage conservent correction à gauche et corrigé à droite. En mode groupe, le tableau
+comporte individuel /15, groupe /5 (détail des camarades en petit) et finale /20. Les exports CSV/JSON
+contiennent ces notes ; `etat_groupe` explique les notes vides. Un document final peut contenir des cas
+« À traiter » : document produit ne signifie pas que toutes les notes sont calculables.
+
+Changer les groupes ou une correction invalide les anciens PDF. Régénérer les fiches recalcule les
+notes depuis SQLite. Changer de grille conserve les groupes ; désactiver l’option conserve leur saisie
+et revient à la notation individuelle sur 20.
+
+### Lecture des échanges
 
 Les deux zones restent visibles : **Consigne à copier dans l’IA**, avec **Copier** en dessous, et **Résultat de l’IA**. Après **Vérifier**, **Enregistrer et continuer** enregistre la grille, le corrigé ou l’inventaire et ouvre la suite. Les versions de corrigé manquantes sont proposées successivement.
 
