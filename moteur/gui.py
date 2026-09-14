@@ -12,8 +12,8 @@ import threading
 from urllib.parse import urlsplit, parse_qs
 import webbrowser
 from .db import DEFAULT_DB
-from .gui_prompts import make_prompt
-from .gui_service import Application
+from .gui_prompts_v2 import make_prompt
+from .workflow_v2 import WorkflowApplication as Application
 
 WEB = Path(__file__).with_name('web')
 MAX_BODY = 160 * 1024 * 1024
@@ -42,7 +42,6 @@ def make_server(app, port=0):
             self.send_header('Cache-Control','no-store')
             self.send_header('X-Content-Type-Options','nosniff')
             self.send_header('Referrer-Policy','no-referrer')
-            # The PDF viewer is an iframe in this application, not a third-party embed.
             ancestors = "'self'" if status == 200 and mime == 'application/pdf' else "'none'"
             self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-src 'self'; object-src 'self'; base-uri 'none'; frame-ancestors "+ancestors)
             self.end_headers()
@@ -55,7 +54,7 @@ def make_server(app, port=0):
                 parsed=urlsplit(self.path);path=parsed.path;query=parse_qs(parsed.query)
                 if path=='/':
                     self._send(200,(WEB/'index.html').read_text(encoding='utf-8').replace('__TOKEN__',token).encode('utf-8'),'text/html; charset=utf-8')
-                elif path in {'/app.js','/grid-preview.js','/style.css'}:
+                elif path in {'/app.js','/grid-preview.js','/workflow-v2.js','/style.css'}:
                     mime='text/javascript' if path.endswith('.js') else 'text/css'
                     self._send(200,(WEB/path[1:]).read_bytes(),mime+'; charset=utf-8')
                 elif path=='/api/home':
@@ -68,10 +67,13 @@ def make_server(app, port=0):
                     self._send(200,{'texte':text})
                 elif path=='/api/history':
                     self._send(200,app.instruction_history(query.get('classe',[''])[0]))
-                elif path=='/api/grid-preview':
-                    from .grid_preview import build_grid_preview
+                elif path=='/api/corrige-preview':
                     with app.lock:
-                        preview=build_grid_preview(app,query.get('id',[''])[0])
+                        preview=app.corrige_preview(query.get('id',[''])[0])
+                    self._send(200,preview,'application/pdf')
+                elif path=='/api/grid-preview':
+                    with app.lock:
+                        preview=app.grid_preview(query.get('id',[''])[0])
                     self._send(200,preview,'application/pdf')
                 elif path=='/file':
                     file=app.file(query.get('kind',[''])[0],query.get('id',[''])[0],query.get('name',[None])[0])
@@ -116,6 +118,7 @@ def dispatch(app,data):
     if action=='classe': return app.roster(data['classe'],data['texte'],commit,data.get('rapprochements'),data.get('empreinte'))
     if action=='creer': return app.create(data['classe'],data['titre'])
     if action=='upload': return app.upload(ident,data['role'],data['nom'],data['contenu'])
+    if action=='formats': return app.save_formats(ident,data.get('correction','A6'),data.get('corrige','A6'))
     if action=='brouillon': return app.draft(ident,data['etape'],data['texte'])
     if action=='echange': return app.exchange(ident,data['etape'],data['texte'],commit)
     if action=='corrige':
