@@ -2,6 +2,7 @@
 
 function showGridBlankPreview(){
  if(!state?.dossier?.revision)return;
+ if(homeData?.latex===false){toast('Grille enregistrée. Installez LaTeX pour afficher la feuille de correction vierge.',true);return;}
  const url='/api/grid-preview?id='+encodeURIComponent(state.dossier.id)+'&revision='+encodeURIComponent(state.dossier.revision);
  showModal(`<div class="eyebrow">Grille enregistrée</div><h1>Feuille de correction vierge</h1><p class="lede">Vérifiez maintenant que les critères tiennent correctement sur la fiche. Les notes et retours sont volontairement vides.</p><div class="actions"><a href="${url}" target="_blank" rel="noopener">Ouvrir dans un onglet ↗</a></div><iframe title="Aperçu vierge de la feuille de correction" class="pdf-viewer" src="${url}"></iframe>`,true);
 }
