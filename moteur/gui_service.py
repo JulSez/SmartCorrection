@@ -93,7 +93,9 @@ class Application:
     def _copies(self, conn, dossier):
         rows = []
         for row in conn.execute('''SELECT u.*,c.sujet_id,c.eleve_id,c.version_id,c.pdf_path,c.statut,e.id numero,e.nom,e.prenom,
-            v.version,co.id correction_id FROM ui_copie u JOIN copie c ON c.id=u.copie_id
+            v.version,co.id correction_id,x.reference IS NOT NULL exclue_final
+            FROM ui_copie u JOIN copie c ON c.id=u.copie_id
+            LEFT JOIN ui_copie_exclue x ON x.dossier_id=u.dossier_id AND x.reference=u.reference
             LEFT JOIN eleve e ON e.id=c.eleve_id JOIN version v ON v.id=c.version_id
             LEFT JOIN correction co ON co.copie_id=c.id WHERE u.dossier_id=? ORDER BY u.reference''', (dossier['id'],)):
             item = dict(row)
@@ -461,19 +463,42 @@ class Application:
             self._record(conn,dossier,'revue',{'reference':reference})
         return {'verifiee':reference}
 
+    def include_in_final(self, ident, reference, include):
+        """Persist a reversible output choice without changing scores or attendance."""
+        if type(include) is not bool:
+            raise ValueError('Inclure doit être un booléen')
+        string(reference, 'référence de copie')
+        with database(self.db_path) as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            dossier = self._dossier(conn, ident)
+            copy = next((c for c in self._copies(conn, dossier) if c['reference'] == reference), None)
+            if not copy:
+                raise ValueError('Copie introuvable dans ce dossier')
+            if bool(copy['exclue_final']) == include:
+                if include:
+                    conn.execute('DELETE FROM ui_copie_exclue WHERE dossier_id=? AND reference=?', (ident, reference))
+                else:
+                    conn.execute('INSERT INTO ui_copie_exclue VALUES(?,?)', (ident, reference))
+                conn.execute('UPDATE ui_rendu SET valide=0 WHERE dossier_id=? AND final=1', (ident,))
+                conn.execute('UPDATE ui_dossier SET termine=0 WHERE id=?', (ident,))
+                self._record(conn, dossier, 'selection_finale', {'reference': reference, 'inclure': include})
+        return {'reference': reference, 'inclure': include}
+
     def generate(self, ident, final=False, pdf=True):
         with database(self.db_path) as conn:
             dossier=self._dossier(conn,ident)
             copies=self._copies(conn,dossier)
             if final and not dossier['echantillon_valide']:
                 raise ValueError('Valider l’échantillon avant le document final')
-            selected=copies if final else [c for c in copies if c['echantillon']]
+            selected=[c for c in copies if not c['exclue_final']] if final else [c for c in copies if c['echantillon']]
             if not selected:
-                raise ValueError('Sélectionner des copies à afficher')
+                raise ValueError('Inclure au moins une copie dans le document final' if final else 'Sélectionner des copies à afficher')
             for copy in selected:
                 if copy['a_revoir']:
                     raise ValueError(f"{copy['reference']} reste à revoir : {copy['a_revoir']}")
             result=calculate_selection(conn,dossier['sujet_id'],[c['copie_id'] for c in selected],allow_groups=True)
+            if final:
+                result['copies_exclues'] = [c['reference'] for c in copies if c['exclue_final']]
             labels={c['copie_id']:c['reference'] for c in selected}
             for row in result['notes']:
                 if row['numero'] is None:

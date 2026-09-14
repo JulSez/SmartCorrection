@@ -5,6 +5,47 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync(require('node:path').join(__dirname, '../moteur/web/app.js'), 'utf8');
 
+test('final selection shows reversible choices and counts only included copies',()=>{
+ const h=harness();
+ h.run(`state.copies=[{reference:'C001',numero:1,pages:[1],statut:'present',correction_id:1,exclue_final:0},{reference:'C002',numero:2,pages:[2],statut:'present',exclue_final:1}];renderCorrection(true)`);
+ const html=h.node('#main').innerHTML;
+ assert.match(html,/data-final-copy="C001"[^>]*checked/);
+ assert.doesNotMatch(html,/data-final-copy="C002"[^>]*checked/);
+ assert.match(html,/1 copie\(s\) incluse\(s\) · 1 exclue\(s\)/);
+ assert.match(html,/<strong>0<\/strong><span>restantes/);
+ h.run('state.copies.forEach(c=>c.exclue_final=1);renderCorrection(true)');
+ assert.match(h.node('#main').innerHTML,/id="generate-pdf" disabled/);
+ assert.match(h.node('#main').innerHTML,/id="generate-tex" disabled/);
+ h.run('renderCorrection(false)');
+ assert.doesNotMatch(h.node('#main').innerHTML,/data-final-copy=/);
+});
+
+test('final checkbox persists both choices and refreshes the dossier',async()=>{
+ const h=harness(), calls=[];
+ h.run('renderDossier=()=>{}');
+ const box={dataset:{finalCopy:'C001'},checked:false};
+ h.context.box=box;
+ h.context.fetch=async(url,options)=>{
+  if(options?.method==='POST')calls.push(JSON.parse(options.body));
+  return {ok:true,json:async()=>({dossier:{id:'demo'},copies:[{reference:'C001',exclue_final:!box.checked}]})};
+ };
+ await h.run('toggleFinalCopy(box)');
+ assert.equal(h.run('state.copies[0].exclue_final'),true);
+ box.checked=true;
+ await h.run('toggleFinalCopy(box)');
+ assert.deepEqual(calls,[false,true].map(inclure=>({action:'selection_finale',dossier:'demo',reference:'C001',inclure})));
+ assert.equal(h.run('state.copies[0].exclue_final'),false);
+});
+
+test('failed final selection restores the checkbox and explains the error',async()=>{
+ const h=harness();
+ h.context.box={dataset:{finalCopy:'C001'},checked:false};
+ h.context.fetch=async()=>({ok:false,json:async()=>({erreur:'Enregistrement impossible'})});
+ await h.run('toggleFinalCopy(box)');
+ assert.equal(h.context.box.checked,true);
+ assert.match(h.node('#toast').textContent,/Enregistrement impossible/);
+});
+
 test('identity reconciliation leaves ambiguous pupils undecided and labels a real merge',()=>{
  const h=harness();
  h.run(`renderRosterPreview({empreinte:'snapshot',identites:[],eleves:[{ligne:1,nom:'Dupont',prenom:'Alice',inscrit_id:1,lignes_proches:[],candidats:[{id:1,nom:'Dupont',prenom:'Alice',classes:['A'],raison:'Exact'},{id:8,nom:'Dupont Martin',prenom:'Alice',classes:['B'],raison:'Proche'}]}]})`);

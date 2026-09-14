@@ -29,6 +29,73 @@ class GuiPdfTests(unittest.TestCase):
                 pdf = PdfReader(compile_pdf(tex))
                 self.assertGreaterEqual(len(pdf.pages), 1)
 
+    def test_array_compatibility_fallback_in_individual_and_group_mode(self):
+        fixture = test_gui.GuiWorkflowTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        fixture.pilot()
+        fallback = r'\makeatletter' + '\n' + r'\@ifundefined{insert@pcolumn}'
+        for grouped in (False, True):
+            fixture.app.groups(fixture.ident, grouped, '1,2,3,4,5,6,7')
+            result = fixture.app.generate(fixture.ident, pdf=False)
+            data = json.loads(fixture.app.file('rendu', result['id'], 'notes.json').read_text())
+            source = render_student(data['fiches'][0], data['sujet'], config_from_mapping(data['config']))
+            self.assertLess(source.index(r'\usepackage[table]{xcolor}'), source.index(fallback))
+            self.assertIn(data['fiches'][0]['corrige_latex'], source)
+            for missing in (True, False):
+                with self.subTest(grouped=grouped, missing=missing):
+                    # Simulate either a missing helper or a package-defined implementation.
+                    setup = (r'\let\insert@pcolumn\undefined' if missing else
+                             r'\def\insert@pcolumn{\insert@column}%'
+                             '\n' + r'\let\SCsavedpcolumn\insert@pcolumn')
+                    target = r'\insert@column' if missing else r'\SCsavedpcolumn'
+                    check = (r'\makeatletter\ifx\insert@pcolumn' + target +
+                             r'\else\errmessage{Incorrect array compatibility fallback}\fi\makeatother')
+                    simulated = source.replace(fallback, r'\makeatletter' + '\n' + setup + '\n' + fallback, 1)
+                    simulated = simulated.replace(r'\begin{document}', check + '\n' + r'\begin{document}', 1)
+                    tex = fixture.root/f'array-{grouped}-{missing}.tex'
+                    tex.write_text(simulated, encoding='utf-8')
+                    pdf = PdfReader(compile_pdf(tex))
+                    self.assertGreaterEqual(len(pdf.pages), 1)
+                    self.assertIn('Conseils', '\n'.join(p.extract_text() for p in pdf.pages))
+
+    def test_final_pdf_skips_a_broken_copy_and_can_restore_it(self):
+        fixture = test_gui.GuiWorkflowTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        # A second version is used by only one copy; its raw LaTeX cannot compile.
+        fixture.grid['versions'].append({'version': 'B'})
+        grid_b = dict(fixture.grid['grilles'][0], nom='Version B', version='B')
+        fixture.grid['grilles'].append(grid_b)
+        fixture.exchange('grille', fixture.grid)
+        fixture.app.corrige(fixture.ident, 'A', r'Corrigé valide : $x=2$.', True)
+        fixture.app.corrige(fixture.ident, 'B', r'\CommandeInconnueSmartCorrection', True)
+        fixture.inventory['copies'][5]['version'] = 'B'
+        fixture.exchange('copies', fixture.inventory)
+        fixture.pilot()
+        fixture.exchange('correction', fixture.corrections(['C006']))
+        exported = fixture.app.generate(fixture.ident, final=True, pdf=False)
+        data = json.loads(fixture.app.file('rendu', exported['id'], 'notes.json').read_text())
+        bad = next(s for s in data['fiches'] if s['version']=='B')
+        tex = fixture.root/'broken.tex'
+        tex.write_text(render_student(bad, data['sujet'], config_from_mapping(data['config'])), encoding='utf-8')
+        with self.assertRaisesRegex(RuntimeError, 'Compilation échouée : broken.tex'):
+            compile_pdf(tex)
+        fixture.app.include_in_final(fixture.ident, 'C006', False)
+        final = fixture.app.generate(fixture.ident, final=True, pdf=True)
+        pdf = PdfReader(fixture.app.file('rendu', final['id'], 'corrections.pdf'))
+        self.assertEqual(len(pdf.pages), 6)
+        self.assertNotIn('C006', '\n'.join(p.extract_text() for p in pdf.pages))
+        fixture.app.include_in_final(fixture.ident, 'C006', True)
+        # The original correction is retained; after repair it can be included again.
+        fixture.app.corrige(fixture.ident, 'B', r'Corrigé réparé : $x=2$.', True)
+        fixture.app.review(fixture.ident, 'C006')
+        fixture.app.sample(fixture.ident, [f'C{i:03d}' for i in range(1, 6)], True)
+        restored = fixture.app.generate(fixture.ident, final=True, pdf=True)
+        pdf = PdfReader(fixture.app.file('rendu', restored['id'], 'corrections.pdf'))
+        self.assertEqual(len(pdf.pages), 7)
+        self.assertIn('C006', '\n'.join(p.extract_text() for p in pdf.pages))
+
     def test_fiches_and_combined_document(self):
         fixture = test_gui.GuiWorkflowTests()
         fixture.setUp()

@@ -31,6 +31,12 @@ CREATE TABLE IF NOT EXISTS ui_copie (
  copie_id INTEGER NOT NULL UNIQUE REFERENCES copie(id), echantillon INTEGER NOT NULL DEFAULT 0,
  a_revoir TEXT, PRIMARY KEY(dossier_id,reference)
 );
+-- A rendering choice, independent of attendance, marks and sample membership.
+CREATE TABLE IF NOT EXISTS ui_copie_exclue (
+ dossier_id TEXT NOT NULL, reference TEXT NOT NULL,
+ PRIMARY KEY(dossier_id,reference),
+ FOREIGN KEY(dossier_id,reference) REFERENCES ui_copie(dossier_id,reference) ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS ui_page_ignoree (
  dossier_id TEXT NOT NULL REFERENCES ui_dossier(id), page INTEGER NOT NULL CHECK(page>0),
  motif TEXT NOT NULL, PRIMARY KEY(dossier_id,page)

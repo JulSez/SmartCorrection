@@ -120,6 +120,7 @@ def dispatch(app,data):
     if action=='echantillon': return app.sample(ident,data['references'],commit)
     if action=='groupes': return app.groups(ident,data.get('actif'),data.get('texte'))
     if action=='revue': return app.review(ident,data['reference'])
+    if action=='selection_finale': return app.include_in_final(ident,data['reference'],data.get('inclure'))
     if action=='generer': return app.generate(ident,final=data.get('final',False),pdf=data.get('pdf',True))
     raise ValueError('Action inconnue')
 
