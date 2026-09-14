@@ -310,6 +310,26 @@ joints à ce premier parcours doivent être des PDF. Les variantes de notation e
 accessibles dans le moteur CLI. Les tests utilisent des évaluations **fictives** : la relecture
 d’un paquet réel, du rendu et du parcours Windows reste une étape de validation enseignant.
 
+### Exclure une copie du document final
+
+Dans **Corriger le reste → Suivi du paquet**, décochez la case **Document final**
+de la copie concernée. Le choix est enregistré immédiatement. La copie reste visible
+avec la mention **Exclue** ; recochez-la pour la réinclure.
+
+Le PDF final, les fiches individuelles, les sources LaTeX et les lignes de notes CSV/JSON
+ne contiennent que les copies incluses. Le JSON conserve aussi la liste des références
+exclues (`copies_exclues`). Une copie exclue non corrigée ou à revoir ne bloque plus
+le rendu des autres. Au moins une copie doit rester incluse.
+
+La correction, les annotations, les conseils et le statut de présence sont conservés.
+Ce choix ne change pas l’échantillon de test. La consigne **Corriger le reste** ne demande
+plus les copies exclues ; leur réactivation les remet dans les copies à traiter si nécessaire.
+Chaque changement signale les documents finaux précédents **à régénérer**.
+
+En mode groupe, l’exclusion concerne les documents, pas le barème : une note valide
+reste utilisée pour les camarades. Une correction manquante ou à revoir laisse leur
+note de groupe en attente. Exclure une fiche ne déclare jamais l’élève absent.
+
 ### Note de groupe Maths expertes
 
 Dans **Repérer les copies**, ouvrir **Note de groupe · Maths expertes** après avoir enregistré la grille.

@@ -120,6 +120,13 @@ def render_student(student, subject, cfg):
              r'\documentclass[10pt]{article}', r'\usepackage[utf8]{inputenc}',
              r'\usepackage[T1]{fontenc}', r'\usepackage{lmodern,textcomp}', r'\IfFileExists{french.ldf}{\usepackage[french]{babel}}{}', r'\usepackage{amsmath,amssymb,longtable,array}',
              r'\usepackage[table]{xcolor}',
+             # Some array/colortbl combinations refer to an unavailable helper.
+             # Keep any definition supplied by the installed packages.
+             r'\makeatletter',
+             r'\@ifundefined{insert@pcolumn}{%',
+             r'  \let\insert@pcolumn\insert@column',
+             r'}{}',
+             r'\makeatother',
              r'\usepackage[paperwidth=105mm,paperheight=148mm,margin=6mm,bottom=9mm,footskip=4mm]{geometry}',
              r'\definecolor{SCblue}{HTML}{245A81}', r'\definecolor{SCpale}{HTML}{EAF2F8}',
              r'\definecolor{SCline}{HTML}{CBDCE9}',

@@ -82,7 +82,7 @@ Après discussion, rends le JSON complet dans un unique bloc de code json, sans 
         if mode=='reste' and not d['echantillon_valide']:
             raise ValueError('Valider l’échantillon avant de corriger le reste')
         selected=[c for c in state['copies'] if c['statut']=='present' and
-                  (c['echantillon'] if mode=='echantillon' else (not c['correction_id'] or c['a_revoir']))]
+                  (c['echantillon'] if mode=='echantillon' else (not c['exclue_final'] and (not c['correction_id'] or c['a_revoir'])))]
         if not selected:
             raise ValueError('Aucune copie à corriger dans cette sélection')
         public_copies=[{k:c[k] for k in ('reference','version','pages')} for c in selected]
