@@ -12,6 +12,7 @@ import threading
 import uuid
 from .db import database, init_db, ROOT
 from .import_classe import _read_roster, import_classe_csv
+from .identites import preview_roster
 from .import_evaluation import import_evaluation
 from .import_correction import import_correction, compatible_grid
 from .calcul import calculate_selection
@@ -91,7 +92,7 @@ class Application:
 
     def _copies(self, conn, dossier):
         rows = []
-        for row in conn.execute('''SELECT u.*,c.sujet_id,c.eleve_id,c.version_id,c.pdf_path,c.statut,e.numero,e.nom,e.prenom,
+        for row in conn.execute('''SELECT u.*,c.sujet_id,c.eleve_id,c.version_id,c.pdf_path,c.statut,e.id numero,e.nom,e.prenom,
             v.version,co.id correction_id FROM ui_copie u JOIN copie c ON c.id=u.copie_id
             LEFT JOIN eleve e ON e.id=c.eleve_id JOIN version v ON v.id=c.version_id
             LEFT JOIN correction co ON co.copie_id=c.id WHERE u.dossier_id=? ORDER BY u.reference''', (dossier['id'],)):
@@ -107,7 +108,7 @@ class Application:
 
     def home(self):
         with database(self.db_path) as conn:
-            return {'classes': [dict(r) for r in conn.execute('SELECT classe,COUNT(*) effectif FROM eleve GROUP BY classe ORDER BY classe')],
+            return {'classes': [dict(r) for r in conn.execute('SELECT classe,COUNT(*) effectif FROM eleve_classe GROUP BY classe ORDER BY classe')],
                     'dossiers': [dict(r) for r in conn.execute('SELECT * FROM ui_dossier ORDER BY cree_le DESC,id')],
                     'latex': bool(shutil.which('pdflatex'))}
 
@@ -123,7 +124,7 @@ class Application:
                     JOIN exercice e ON e.id=q.exercice_id JOIN grille g ON g.id=i.grille_id
                     LEFT JOIN version v ON v.id=g.version_id WHERE g.sujet_id=? ORDER BY g.id,e.ordre,q.ordre,i.ordre''', (dossier['sujet_id'],))]
             return {'dossier': dict(dossier), 'groupes': group_state(conn,dossier), 'copies': self._copies(conn, dossier), 'grille': grids, 'versions': versions,
-                    'eleves': [dict(r) for r in conn.execute('SELECT numero,nom,prenom FROM eleve WHERE classe=? ORDER BY numero', (dossier['classe'],))],
+                    'eleves': [dict(r) for r in conn.execute('SELECT id,id numero,nom,prenom FROM eleve_par_classe WHERE classe=? ORDER BY id', (dossier['classe'],))],
                     'fichiers': [dict(r) for r in conn.execute('SELECT id,role,nom,pages FROM ui_fichier WHERE dossier_id=?', (ident,))],
                     'brouillons': {r['etape']: r['texte'] for r in conn.execute('SELECT * FROM ui_brouillon WHERE dossier_id=?', (ident,))},
                     'rendus': [dict(id=r['id'], revision=r['revision'], final=r['final'], valide=r['valide'],
@@ -131,7 +132,7 @@ class Application:
                                for r in conn.execute('SELECT * FROM ui_rendu WHERE dossier_id=? ORDER BY cree_le DESC,id DESC', (ident,))],
                     'consignes': {'generales': _policy(conn,'generale'), 'classe': _policy(conn,'classe',dossier['classe'])}}
 
-    def roster(self, classe, text, commit=False):
+    def roster(self, classe, text, commit=False, choices=None, fingerprint=None):
         string(classe, 'classe')
         if not isinstance(text, str):
             raise ValueError('CSV attendu')
@@ -139,15 +140,17 @@ class Application:
         path.write_text(text, encoding='utf-8')
         try:
             if commit:
-                return import_classe_csv(path, classe.strip(), self.db_path)
-            return {'classe': classe.strip(), 'eleves': _read_roster(path)}
+                return import_classe_csv(path, classe.strip(), self.db_path, choices=choices, fingerprint=fingerprint)
+            with database(self.db_path) as conn:
+                conn.execute('BEGIN')
+                return preview_roster(conn, classe.strip(), _read_roster(path))
         finally:
             path.unlink(missing_ok=True)
 
     def create(self, classe, title):
         string(classe); string(title)
         with database(self.db_path) as conn:
-            if not conn.execute('SELECT 1 FROM eleve WHERE classe=?', (classe,)).fetchone():
+            if not conn.execute('SELECT 1 FROM eleve_classe WHERE classe=?', (classe,)).fetchone():
                 raise ValueError('Importer cette classe avant de créer le dossier')
             ident = uuid.uuid4().hex
             conn.execute('INSERT INTO ui_dossier(id,classe,titre,generale_id,classe_id) VALUES(?,?,?,?,?)',
@@ -283,7 +286,7 @@ class Application:
             raise ValueError('Valider la grille avant les copies')
         packet = self._packet(conn,dossier['id'])
         versions = {r['version']:r['id'] for r in conn.execute('SELECT * FROM version WHERE sujet_id=?',(dossier['sujet_id'],))}
-        pupils = {r['numero']:r['id'] for r in conn.execute('SELECT * FROM eleve WHERE classe=?',(dossier['classe'],))}
+        pupils = {r['numero']:r['id'] for r in conn.execute('SELECT id,id numero,nom,prenom FROM eleve_par_classe WHERE classe=?',(dossier['classe'],))}
         existing = {c['reference']:c for c in self._copies(conn,dossier)}
         entries, covered, references, numbers = [], set(), set(), set()
         for item in array(data['copies'],'copies',True):

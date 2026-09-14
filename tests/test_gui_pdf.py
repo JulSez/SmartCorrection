@@ -10,6 +10,25 @@ import test_gui
 
 @unittest.skipUnless(os.environ.get('SMARTCORRECTION_TEST_PDF') == '1', 'PDF integration runs in the dedicated LaTeX job')
 class GuiPdfTests(unittest.TestCase):
+    def test_score_tables_compile_without_array_m_column_helper(self):
+        fixture = test_gui.GuiWorkflowTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        fixture.pilot()
+        for grouped in (False, True):
+            with self.subTest(grouped=grouped):
+                fixture.app.groups(fixture.ident, grouped, '1,2,3,4,5,6,7')
+                result = fixture.app.generate(fixture.ident, pdf=False)
+                data = json.loads(fixture.app.file('rendu', result['id'], 'notes.json').read_text())
+                source = render_student(data['fiches'][0], data['sujet'], config_from_mapping(data['config']))
+                self.assertNotIn('m{', source)
+                # Exercise an array installation where its m-column helper is unavailable.
+                source = source.replace(r'\begin{document}', r'\makeatletter\let\ar@align@mcell\undefined\makeatother\begin{document}')
+                tex = fixture.root / ('table-groupe.tex' if grouped else 'table-individuelle.tex')
+                tex.write_text(source, encoding='utf-8')
+                pdf = PdfReader(compile_pdf(tex))
+                self.assertGreaterEqual(len(pdf.pages), 1)
+
     def test_fiches_and_combined_document(self):
         fixture = test_gui.GuiWorkflowTests()
         fixture.setUp()

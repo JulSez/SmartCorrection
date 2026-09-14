@@ -5,6 +5,24 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync(require('node:path').join(__dirname, '../moteur/web/app.js'), 'utf8');
 
+test('identity reconciliation leaves ambiguous pupils undecided and labels a real merge',()=>{
+ const h=harness();
+ h.run(`renderRosterPreview({empreinte:'snapshot',identites:[],eleves:[{ligne:1,nom:'Dupont',prenom:'Alice',inscrit_id:1,lignes_proches:[],candidats:[{id:1,nom:'Dupont',prenom:'Alice',classes:['A'],raison:'Exact'},{id:8,nom:'Dupont Martin',prenom:'Alice',classes:['B'],raison:'Proche'}]}]})`);
+ assert.equal(h.node('#roster-save').disabled,true);
+ assert.match(h.node('#roster-preview').innerHTML,/Fusionner ID 1 dans ID 8/);
+ h.node('#identity-1').value='id:8';
+ assert.equal(JSON.stringify(h.run('rosterChoices()')),JSON.stringify([{id:8,fusionner:1}]));
+ h.node('#identity-1').value='new';
+ assert.equal(JSON.stringify(h.run('rosterChoices()')),JSON.stringify([{nouveau:true}]));
+});
+
+test('CSV duplicates can refer to an earlier line without creating another ID',()=>{
+ const h=harness();
+ h.run(`rosterPreview={eleves:[{ligne:1,inscrit_id:null},{ligne:2,inscrit_id:null}]}`);
+ h.node('#identity-1').value='id:42';h.node('#identity-2').value='line:1';
+ assert.equal(JSON.stringify(h.run('rosterChoices()')),JSON.stringify([{id:42},{ligne:1}]));
+});
+
 test('group editor is optional and shows local identities and missing groups',()=>{
  const h=harness();
  assert.doesNotMatch(h.run('groupsPanel()'),/id="groups-active" checked/);

@@ -27,8 +27,8 @@ class ImportClasseTests(unittest.TestCase):
         self.assertEqual(
             result['eleves'],
             [
-                {'numero': 1, 'nom': 'DUPONT', 'prenom': 'Alice'},
-                {'numero': 2, 'nom': 'MARTIN', 'prenom': 'Léo'},
+                {'id':1, 'numero': 1, 'nom': 'DUPONT', 'prenom': 'Alice'},
+                {'id':2, 'numero': 2, 'nom': 'MARTIN', 'prenom': 'Léo'},
             ],
         )
         again = import_classe_csv(path, '1GSpé', self.db)
@@ -43,7 +43,7 @@ class ImportClasseTests(unittest.TestCase):
             import_classe_csv(conflicting, '1GSpé', self.db)
         with database(self.db) as conn:
             rows = [dict(r) for r in conn.execute(
-                'SELECT numero,nom,prenom FROM eleve WHERE classe=? ORDER BY numero', ('1GSpé',)
+                'SELECT numero,nom,prenom FROM eleve_par_classe WHERE classe=? ORDER BY numero', ('1GSpé',)
             )]
         self.assertEqual(rows, [{'numero': 7, 'nom': 'DUPONT', 'prenom': 'Alice'}])
 
@@ -69,10 +69,11 @@ class ImportClasseTests(unittest.TestCase):
         with database(self.db) as conn:
             subject_id = import_evaluation(evaluation, conn, self.root)
             copy = conn.execute('''SELECT e.numero,c.sujet_id FROM copie c
-                JOIN eleve e ON e.id=c.eleve_id WHERE c.sujet_id=?''', (subject_id,)).fetchone()
+                JOIN eleve_par_classe e ON e.id=c.eleve_id AND e.classe=(SELECT classe FROM sujet WHERE id=c.sujet_id) WHERE c.sujet_id=?''', (subject_id,)).fetchone()
         self.assertEqual(copy['numero'], 1)
         self.assertEqual(copy['sujet_id'], subject_id)
 
 
 if __name__ == '__main__':
     unittest.main()
+

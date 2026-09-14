@@ -153,7 +153,7 @@ def import_copies_csv(path, sujet_id, pdf_path, db_path, replace=False):
             'SELECT id,version FROM version WHERE sujet_id=?', (sujet_id,)
         )}
         pupils = {row['numero']: row['id'] for row in conn.execute(
-            'SELECT id,numero FROM eleve WHERE classe=?', (subject['classe'],)
+            'SELECT id,numero FROM eleve_par_classe WHERE classe=?', (subject['classe'],)
         )}
 
         for row in rows:
@@ -248,3 +248,4 @@ def import_copies_csv(path, sujet_id, pdf_path, db_path, replace=False):
         'absents': absent,
         'pages_assignees': assigned_pages,
     }
+

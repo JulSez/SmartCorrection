@@ -86,19 +86,33 @@ def import_evaluation(data, conn, base_dir=Path('.'), check_pdfs=False):
         conn.execute('UPDATE grille SET total_points=? WHERE id=?', (total, gid))
 
     pupils = {row['numero']: row['id'] for row in conn.execute(
-        'SELECT id,numero FROM eleve WHERE classe=?', (classe,)
+        'SELECT id,numero FROM eleve_par_classe WHERE classe=?', (classe,)
     )}
     declared = set()
     for pupil in array(data.get('eleves', []), 'eleves'):
-        object_fields(pupil, {'numero', 'nom', 'prenom'}, {'numero'})
+        object_fields(pupil, {'numero', 'nom', 'prenom', 'eleve_id'}, {'numero'})
         num = integer(pupil['numero'], 'numero élève')
         if num in declared:
             raise ValueError(f'Élève répété : {num}')
         declared.add(num)
         _optional_text(pupil, ('nom', 'prenom'))
-        conn.execute('INSERT INTO eleve(classe,numero,nom,prenom) VALUES(?,?,?,?) ON CONFLICT(classe,numero) DO NOTHING',
-                     (classe, num, pupil.get('nom'), pupil.get('prenom')))
-        pupils[num] = conn.execute('SELECT id FROM eleve WHERE classe=? AND numero=?', (classe, num)).fetchone()['id']
+        from .identites import add_membership, candidates
+        pupil_id = pupil.get('eleve_id')
+        if pupil_id is not None:
+            integer(pupil_id,'eleve_id')
+            if not conn.execute('SELECT 1 FROM eleve WHERE id=?',(pupil_id,)).fetchone():
+                raise ValueError('ID élève inconnu : importer la classe avant cette évaluation')
+            occupied=conn.execute('SELECT eleve_id FROM eleve_classe WHERE classe=? AND numero=?',(classe,num)).fetchone()
+            if occupied and occupied[0]!=pupil_id:
+                raise ValueError('Numéro de liste déjà affecté à une autre identité')
+            add_membership(conn,pupil_id,classe,num)
+            pupils[num]=pupil_id
+        elif num not in pupils:
+            if candidates(conn,pupil.get('nom'),pupil.get('prenom')):
+                raise ValueError('Identité existante possible : importer la classe et valider le rapprochement, ou fournir eleve_id')
+            pupil_id=conn.execute('INSERT INTO eleve(nom,prenom) VALUES(?,?)',(pupil.get('nom'),pupil.get('prenom'))).lastrowid
+            add_membership(conn,pupil_id,classe,num)
+            pupils[num]=pupil_id
     for copy in array(data.get('copies', []), 'copies'):
         object_fields(copy, {'numero', 'version', 'pdf_path', 'statut'}, {'numero', 'version'})
         num = integer(copy['numero'], 'numero copie')
@@ -134,3 +148,4 @@ def import_evaluation(data, conn, base_dir=Path('.'), check_pdfs=False):
 def import_evaluation_json(path, db_path, check_pdfs=False):
     with database(db_path) as conn:
         return import_evaluation(load_json(path), conn, Path(path).resolve().parent, check_pdfs)
+

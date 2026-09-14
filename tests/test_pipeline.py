@@ -29,7 +29,7 @@ class PipelineTests(unittest.TestCase):
         with database(self.db) as conn:
             return import_evaluation(data or self.evaluation, conn, EXAMPLE)
     def correction(self, conn, num=2):
-        c = conn.execute('SELECT c.* FROM copie c JOIN eleve e ON e.id=c.eleve_id WHERE e.numero=?', (num,)).fetchone()
+        c = conn.execute('SELECT c.* FROM copie c JOIN eleve_par_classe e ON e.id=c.eleve_id AND e.classe=(SELECT classe FROM sujet WHERE id=c.sujet_id) WHERE e.numero=?', (num,)).fetchone()
         return dict(load_json(EXAMPLE/f'correction_{num}.json'), copie_id=c['id'], grille_id=compatible_grid(conn,c))
     def corrected(self):
         sid=self.import_eval()
@@ -247,3 +247,4 @@ class PipelineTests(unittest.TestCase):
             c.execute('DELETE FROM correction_item WHERE id=1')
         with self.assertRaisesRegex(ValueError,'incomplète'):
             calculate_notes(self.db,sid)
+

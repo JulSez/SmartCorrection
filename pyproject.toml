@@ -17,8 +17,9 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.package-data]
-moteur = ["schema.sql", "gui_schema.sql", "web/*"]
+moteur = ["schema.sql", "schema_legacy.sql", "gui_schema.sql", "web/*"]
 
 [project.optional-dependencies]
 gui = ["pypdf>=4"]
 pdf = ["pypdf>=4"]
+

@@ -75,54 +75,13 @@ def _read_roster(path):
     return rows
 
 
-def import_classe_csv(path, classe, db_path):
+def import_classe_csv(path, classe, db_path, *, choices=None, fingerprint=None):
+    from .identites import commit_roster
     classe = str(classe).strip()
     if not classe:
         raise ValueError('Le nom de classe est obligatoire')
     roster = _read_roster(path)
     init_db(db_path)
-
-    inserted = 0
-    reused = 0
     with database(db_path) as conn:
         conn.execute('BEGIN IMMEDIATE')
-        for pupil in roster:
-            existing = conn.execute(
-                'SELECT id,nom,prenom FROM eleve WHERE classe=? AND numero=?',
-                (classe, pupil['numero']),
-            ).fetchone()
-            if existing:
-                current_nom = (existing['nom'] or '').strip()
-                current_prenom = (existing['prenom'] or '').strip()
-                if current_nom and current_nom != pupil['nom']:
-                    raise ValueError(
-                        f"Conflit pour {classe} n°{pupil['numero']} : nom existant {current_nom!r}, CSV {pupil['nom']!r}"
-                    )
-                if current_prenom and current_prenom != pupil['prenom']:
-                    raise ValueError(
-                        f"Conflit pour {classe} n°{pupil['numero']} : prénom existant {current_prenom!r}, CSV {pupil['prenom']!r}"
-                    )
-                if not current_nom or not current_prenom:
-                    conn.execute(
-                        'UPDATE eleve SET nom=?,prenom=? WHERE id=?',
-                        (pupil['nom'], pupil['prenom'], existing['id']),
-                    )
-                reused += 1
-            else:
-                conn.execute(
-                    'INSERT INTO eleve(classe,numero,nom,prenom) VALUES(?,?,?,?)',
-                    (classe, pupil['numero'], pupil['nom'], pupil['prenom']),
-                )
-                inserted += 1
-
-        pupils = [dict(row) for row in conn.execute(
-            'SELECT numero,nom,prenom FROM eleve WHERE classe=? ORDER BY numero', (classe,)
-        )]
-
-    return {
-        'classe': classe,
-        'importes': inserted,
-        'deja_presents': reused,
-        'effectif': len(pupils),
-        'eleves': pupils,
-    }
+        return commit_roster(conn, classe, roster, choices, fingerprint)

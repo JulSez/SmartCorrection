@@ -114,7 +114,7 @@ class SharedPdfCopyTests(unittest.TestCase):
         self.assertEqual(result['copies_attribuees'], 1)
         self.assertEqual(result['copies_non_attribuees'], 0)
         with database(self.db) as conn:
-            copy = conn.execute('SELECT c.*,e.numero FROM copie c JOIN eleve e ON e.id=c.eleve_id').fetchone()
+            copy = conn.execute('SELECT c.*,e.numero FROM copie c JOIN eleve_par_classe e ON e.id=c.eleve_id AND e.classe=(SELECT classe FROM sujet WHERE id=c.sujet_id)').fetchone()
             self.assertEqual(copy['numero'], 2)
             self.assertEqual([r['page'] for r in conn.execute(
                 'SELECT page FROM copie_page WHERE copie_id=? ORDER BY ordre', (copy['id'],)
@@ -231,3 +231,4 @@ class SharedPdfCopyTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

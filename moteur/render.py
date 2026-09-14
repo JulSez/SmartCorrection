@@ -142,7 +142,7 @@ def render_student(student, subject, cfg):
              r'\textbf{Version :} '+esc(student['version'] or '?')+r'\hfill\textbf{Classe :} '+esc(subject['classe'])+r'\par',
              r'\textbf{Élève :} '+esc(label)+r'\par\vspace{2mm}',
              r'\renewcommand{\arraystretch}{1.4}\arrayrulecolor{SCline}',
-             r'\begin{tabular}{|m{.55\linewidth}|>{\centering\arraybackslash}m{\dimexpr.45\linewidth-4\tabcolsep-3\arrayrulewidth\relax}|}\hline',
+             r'\begin{tabular}{|p{.55\linewidth}|>{\centering\arraybackslash}p{\dimexpr.45\linewidth-4\tabcolsep-3\arrayrulewidth\relax}|}\hline',
              r'\rowcolor{SCpale}\textbf{'+f'Note (/{fmt(cfg.note_finale_max)})'+r'} & \textcolor{SCblue}{\textbf{'+fmt(student['note_finale'])+r'}}\\\hline',
              r'\end{tabular}\par']
     if not individual_only:
@@ -307,7 +307,7 @@ def export_results(conn, result, output, pdf=False, combined=False):
         students = [build_student_data(conn, result, row) for row in result['notes']]
         payload = dict(result, fiches=students)
         (stage/'notes.json').write_text(json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False)+'\n', encoding='utf-8')
-        fields = ['copie_id','numero','statut','groupe','note_brute','bareme_max','note_individuelle','note_groupe','note_finale','camarades','etat_groupe']
+        fields = ['copie_id','eleve_id','numero','statut','groupe','note_brute','bareme_max','note_individuelle','note_groupe','note_finale','camarades','etat_groupe']
         with (stage/'notes.csv').open('w', newline='', encoding='utf-8-sig') as f:
             writer = csv.DictWriter(f, fields, delimiter=';')
             writer.writeheader()

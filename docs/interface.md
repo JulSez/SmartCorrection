@@ -43,10 +43,28 @@ smartcorrection-gui --db db/mon-travail.sqlite --data-dir private/mon-travail --
 
 ## Les deux boutons de l’accueil
 
-**Ajouter une classe** importe un CSV `nom,prenom` avec prévisualisation. Une colonne `numero`
-facultative permet de conserver les numéros existants. Les séparateurs virgule, point-virgule
-et tabulation sont reconnus. L’interface lit UTF-8 et les CSV Windows-1252 ; les données sont
-ensuite enregistrées en Unicode. Réimporter un numéro avec un autre nom est refusé.
+**Ajouter une classe** importe un CSV `nom,prenom`. **Vérifier les élèves** compare les noms à
+l’ensemble de la base : accents, casse, tirets, noms/prénoms composés et ressemblances orthographiques.
+Chaque proposition montre l’ID permanent, le nom complet et les classes déjà connues. Aucun
+rapprochement approximatif ou entre classes n’est appliqué automatiquement. Choisir l’élève existant,
+**Nouvel élève** (homonyme), ou une ligne précédente du CSV (doublon), puis **Confirmer l’import**.
+Les correspondances exactes déjà inscrites dans cette même classe sont présélectionnées lorsqu’elles
+ne sont pas ambiguës. Les autres élèves de la base restent sélectionnables si la suggestion manque.
+L’écran final affiche les IDs attribués. L’ID ne dépend ni de la classe ni de l’ordre du fichier.
+
+Les colonnes de liste `numero` des anciens CSV ne définissent jamais l’ID global. Elles sont conservées
+uniquement pour les anciens imports CLI. L’interface et ses groupes utilisent désormais l’ID global.
+UTF-8 et Windows-1252 sont acceptés, avec virgule, point-virgule ou tabulation comme séparateur.
+Un changement du fichier ou des identités après la vérification impose une nouvelle vérification.
+
+Quand un élève déjà inscrit est rapproché d’un autre ID, l’option indique explicitement **Fusionner
+ID … dans ID …**. Cette décision réaffecte ses copies et groupes sans perdre ses notes ; les anciennes
+identités sont tracées dans un journal de fusion, les variantes de noms sont conservées. Deux copies
+ou deux groupes différents pour la même évaluation empêchent la fusion : rien n’est modifié.
+
+À la première ouverture d’une base antérieure, une sauvegarde `*.avant-identites-*.sqlite` est créée
+à côté de la base. La migration conserve tous les IDs, inscriptions, copies et notes. Elle ne fusionne
+aucun homonyme d’elle-même. Les anciens numéros de liste restent accessibles pour la compatibilité CLI.
 
 **Corriger un paquet de copies** demande la classe et le titre, puis crée un dossier reprenable.
 Les classes, dossiers, réponses en cours, documents générés et consignes survivent au redémarrage.
@@ -184,8 +202,10 @@ Exemple pour un paquet de trois pages et une grille déjà validée :
 }
 ```
 
-La pagination est physique, à partir de 1 dans le PDF du paquet. `numero` est un entier de la
-liste de classe ou `null`. `absents` ne contient que les numéros explicitement déclarés absents.
+La pagination est physique, à partir de 1 dans le PDF du paquet. `numero` est l’ID global d’un
+élève inscrit dans la classe ou `null`. `absents` contient les IDs explicitement déclarés absents.
+Les anciennes réponses et brouillons utilisant des numéros de liste doivent être revérifiés et associés
+aux IDs affichés dans le tableau local avant de les importer.
 Les références `C001` à `C999999` sont stables dans le dossier.
 
 ### Corrigé de référence
@@ -294,7 +314,7 @@ d’un paquet réel, du rendu et du parcours Windows reste une étape de validat
 
 Dans **Repérer les copies**, ouvrir **Note de groupe · Maths expertes** après avoir enregistré la grille.
 Le même panneau est accessible dans **Tester la correction** et **Corriger le reste**.
-L’option est désactivée par défaut. Cocher **Activer la note de groupe**, coller une ligne de numéros
+L’option est désactivée par défaut. Cocher **Activer la note de groupe**, coller une ligne d’IDs
 par groupe (`2, 31, 3, 22`), puis **Enregistrer les groupes**. Le tableau affiche les identités locales ;
 les doublons et numéros inconnus sont refusés sans modifier les groupes enregistrés. Les élèves
 sans groupe sont signalés. Les groupes ne sont jamais ajoutés aux consignes IA.

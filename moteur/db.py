@@ -1,12 +1,15 @@
 from __future__ import annotations
 import sqlite3
+import uuid
+import json
+import re
 from contextlib import contextmanager
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB = Path('db/smartcorrection.sqlite')
 SCHEMA = Path(__file__).with_name('schema.sql')
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 V3_SCHEMA = r'''
 CREATE TABLE IF NOT EXISTS copie_page (
@@ -150,7 +153,7 @@ def database(db_path=DEFAULT_DB):
 
 
 def init_db(db_path=DEFAULT_DB):
-    """Initialise ou migre SQLite de manière additive et atomique.
+    """Initialise ou migre SQLite de manière atomique.
 
     Les migrations préservent les notes et les identités existantes. Les anciennes
     grilles restent non validées et doivent être revues avant calcul.
@@ -161,6 +164,14 @@ def init_db(db_path=DEFAULT_DB):
         if version > SCHEMA_VERSION:
             raise ValueError('Base plus récente que ce moteur')
         exists = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='item'").fetchone()
+        if exists and version < 6:
+            # Keep a recoverable snapshot before changing identity storage.
+            backup_path = Path(db_path).with_name(Path(db_path).name+'.avant-identites-'+uuid.uuid4().hex[:8]+'.sqlite')
+            backup = sqlite3.connect(backup_path)
+            try:
+                conn.backup(backup)
+            finally:
+                backup.close()
         migration = ''
         if exists and 'grille_id' not in {r['name'] for r in conn.execute('PRAGMA table_info(item)')}:
             migration = '''
@@ -177,12 +188,48 @@ DROP TABLE item;
 ALTER TABLE item_new RENAME TO item;
 '''
         conn.execute('PRAGMA foreign_keys = OFF')
-        base_schema = SCHEMA.read_text(encoding='utf-8') + '\n' + V3_SCHEMA
+        schema_path = Path(__file__).with_name('schema_legacy.sql') if version < 6 else SCHEMA
+        base_schema = schema_path.read_text(encoding='utf-8') + '\n' + V3_SCHEMA
         script = 'BEGIN IMMEDIATE;\n' + migration + base_schema
         if version < 4:
             script += '\n' + V4_SCHEMA + '\n' + base_schema
         script += '\n' + Path(__file__).with_name('gui_schema.sql').read_text(encoding='utf-8')
         conn.executescript(script)
+        if version < 6:
+            # Existing IDs and all grading links survive; never guess which homonyms are one person.
+            for trigger in conn.execute("SELECT name FROM sqlite_master WHERE type='trigger'").fetchall():
+                conn.execute('DROP TRIGGER "'+trigger[0].replace('"','""')+'"')
+            conn.execute('CREATE TABLE eleve_classe (eleve_id INTEGER NOT NULL REFERENCES eleve(id), classe TEXT NOT NULL, numero INTEGER NOT NULL CHECK(numero>0), PRIMARY KEY(eleve_id,classe), UNIQUE(classe,numero))')
+            conn.execute('INSERT INTO eleve_classe SELECT id,classe,numero FROM eleve')
+            conn.execute('CREATE TABLE eleve_v6 (id INTEGER PRIMARY KEY AUTOINCREMENT, nom TEXT, prenom TEXT)')
+            conn.execute('INSERT INTO eleve_v6 SELECT id,nom,prenom FROM eleve')
+            conn.execute('DROP TABLE eleve')
+            conn.execute('ALTER TABLE eleve_v6 RENAME TO eleve')
+            # execute statements one by one: executescript would commit the pending migration.
+            statement = ''
+            for line in (SCHEMA.read_text(encoding='utf-8')+'\n'+V3_SCHEMA).splitlines(True):
+                statement += line
+                if sqlite3.complete_statement(statement):
+                    conn.execute(statement)
+                    statement = ''
+            # Translate saved inventory drafts; a list position must never become another pupil's ID.
+            for draft in conn.execute("SELECT b.*,d.classe FROM ui_brouillon b JOIN ui_dossier d ON d.id=b.dossier_id WHERE b.etape='copies'").fetchall():
+                text = draft['texte'].strip()
+                fenced = re.fullmatch(r'```(?:json)?\s*\n([\s\S]*?)\n```', text, re.IGNORECASE)
+                try:
+                    data = json.loads(fenced[1] if fenced else text)
+                    mapping = {r['numero']:r['eleve_id'] for r in conn.execute('SELECT * FROM eleve_classe WHERE classe=?',(draft['classe'],))}
+                    for copy in data.get('copies',[]):
+                        if copy.get('numero') is not None:
+                            copy['numero'] = mapping[copy['numero']]
+                    data['absents'] = [mapping[n] for n in data.get('absents',[])]
+                except (ValueError, TypeError, KeyError, AttributeError):
+                    # Keep incomplete drafts verbatim; they still require teacher review before import.
+                    continue
+                conn.execute('UPDATE ui_brouillon SET texte=? WHERE dossier_id=? AND etape=?',
+                             (json.dumps(data,ensure_ascii=False,indent=2),draft['dossier_id'],'copies'))
+            conn.execute('''UPDATE ui_rendu SET valide=0 WHERE dossier_id IN
+                (SELECT d.id FROM ui_dossier d JOIN eleve_classe e ON e.classe=d.classe WHERE e.numero<>e.eleve_id)''')
         errors = conn.execute('PRAGMA foreign_key_check').fetchall()
         if errors:
             raise ValueError(f'Intégrité de la base invalide : {len(errors)} liens')
