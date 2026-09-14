@@ -28,3 +28,16 @@ submitResponse=async function(commit){
   showCorrigePreview();
  }
 };
+
+// Le cas normal est un collage depuis l'IA : supprimer le clic intermédiaire
+// « Vérifier ». Le bouton reste disponible pour une saisie ou une réparation manuelle.
+const bindCommonBeforePr17=bindCommon;
+bindCommon=function(){
+ bindCommonBeforePr17();
+ const response=$('#response');
+ if(response?.dataset.stage==='corriges'){
+  response.addEventListener('paste',()=>setTimeout(()=>{
+   if(!busy&&response.value.trim())submitResponse(false);
+  },0),{once:true});
+ }
+};
