@@ -119,17 +119,12 @@ def render_student(student, subject, cfg):
     lines = ['% SmartCorrection: paired-a6-v1',
              r'\documentclass[10pt]{article}', r'\usepackage[utf8]{inputenc}',
              r'\usepackage[T1]{fontenc}', r'\usepackage{lmodern,textcomp}', r'\IfFileExists{french.ldf}{\usepackage[french]{babel}}{}', r'\usepackage{amsmath,amssymb,longtable,array}',
-             r'\usepackage[table]{xcolor}',
-             # Some array/colortbl combinations refer to an unavailable helper.
-             # Keep any definition supplied by the installed packages.
-             r'\makeatletter',
-             r'\@ifundefined{insert@pcolumn}{%',
-             r'  \let\insert@pcolumn\insert@column',
-             r'}{}',
-             r'\makeatother',
+             # Do not load xcolor with the table option here. That option loads
+             # colortbl, whose patches for longtable differ across MiKTeX releases
+             # and can make \hline fail before any student data is typeset.
+             r'\usepackage{xcolor}',
              r'\usepackage[paperwidth=105mm,paperheight=148mm,margin=6mm,bottom=9mm,footskip=4mm]{geometry}',
-             r'\definecolor{SCblue}{HTML}{245A81}', r'\definecolor{SCpale}{HTML}{EAF2F8}',
-             r'\definecolor{SCline}{HTML}{CBDCE9}',
+             r'\definecolor{SCblue}{HTML}{245A81}',
              r'\setlength{\parindent}{0pt}\setlength{\parskip}{3pt}',
              r'\setlength{\tabcolsep}{2.5pt}\setlength{\emergencystretch}{1em}',
              r'\renewcommand{\normalsize}{\fontsize{8.5}{10.5}\selectfont}',
@@ -148,9 +143,9 @@ def render_student(student, subject, cfg):
              r'{\bfseries '+esc(subject.get('titre') or 'Évaluation')+r'}\par',
              r'\textbf{Version :} '+esc(student['version'] or '?')+r'\hfill\textbf{Classe :} '+esc(subject['classe'])+r'\par',
              r'\textbf{Élève :} '+esc(label)+r'\par\vspace{2mm}',
-             r'\renewcommand{\arraystretch}{1.4}\arrayrulecolor{SCline}',
+             r'\renewcommand{\arraystretch}{1.4}',
              r'\begin{tabular}{|p{.55\linewidth}|>{\centering\arraybackslash}p{\dimexpr.45\linewidth-4\tabcolsep-3\arrayrulewidth\relax}|}\hline',
-             r'\rowcolor{SCpale}\textbf{'+f'Note (/{fmt(cfg.note_finale_max)})'+r'} & \textcolor{SCblue}{\textbf{'+fmt(student['note_finale'])+r'}}\\\hline',
+             r'\textcolor{SCblue}{\textbf{'+f'Note (/{fmt(cfg.note_finale_max)})'+r'}} & \textcolor{SCblue}{\textbf{'+fmt(student['note_finale'])+r'}}\\\hline',
              r'\end{tabular}\par']
     if not individual_only:
         lines = lines[:-3]
@@ -164,8 +159,8 @@ def render_student(student, subject, cfg):
         final_note = '--' if pending else fmt(student['note_finale'])
         col = r'>{\centering\arraybackslash}p{\dimexpr.333333\linewidth-2\tabcolsep-1.333333\arrayrulewidth\relax}'
         lines += [r'\begin{tabular}{|'+col+'|'+col+'|'+col+r'|}\hline',
-                  r'\rowcolor{SCpale}\textbf{Individuelle /'+fmt(cfg.note_individuelle_max)+
-                  r'} & \textbf{Groupe /'+fmt(cfg.note_groupe_max)+r'} & \textbf{Finale /'+fmt(cfg.note_finale_max)+r'}\\\hline',
+                  r'\textcolor{SCblue}{\textbf{Individuelle /'+fmt(cfg.note_individuelle_max)+
+                  r'}} & \textcolor{SCblue}{\textbf{Groupe /'+fmt(cfg.note_groupe_max)+r'}} & \textcolor{SCblue}{\textbf{Finale /'+fmt(cfg.note_finale_max)+r'}}\\\hline',
                   score(student['note_individuelle'])+' & '+group_note+r'\newline {\scriptsize '+peers+
                   r'} & \textcolor{SCblue}{\textbf{'+final_note+r'}}\\\hline',
                   r'\end{tabular}\par']
@@ -177,7 +172,7 @@ def render_student(student, subject, cfg):
         lines += [r'\section*{Correction}', r'\renewcommand{\arraystretch}{1.18}',
                   r'\setlength{\LTpre}{0pt}\setlength{\LTpost}{3pt}',
                   r'\begin{longtable}{@{}>{\raggedright\arraybackslash}p{.14\linewidth}>{\raggedright\arraybackslash}p{.34\linewidth}>{\centering\arraybackslash}p{.13\linewidth}>{\raggedright\arraybackslash}p{\dimexpr.39\linewidth-6\tabcolsep\relax}@{}}',
-                  r'\rowcolor{SCpale}\small\textbf{Question} & \small\textbf{Description du critère} & \small\textbf{Note} & \small\textbf{Retour}\\\hline\endhead']
+                  r'\small\textcolor{SCblue}{\textbf{Question}} & \small\textcolor{SCblue}{\textbf{Description du critère}} & \small\textcolor{SCblue}{\textbf{Note}} & \small\textcolor{SCblue}{\textbf{Retour}}\\\hline\endhead']
         for item in student['items']:
             question = esc('Ex. '+str(item.get('exercice', '?')))+r'\newline '+esc('Q. '+str(item.get('question', '?')))
             feedback = [esc(item[key]) for key in ('commentaire', 'annotation') if item.get(key)]

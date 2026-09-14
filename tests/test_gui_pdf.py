@@ -29,35 +29,31 @@ class GuiPdfTests(unittest.TestCase):
                 pdf = PdfReader(compile_pdf(tex))
                 self.assertGreaterEqual(len(pdf.pages), 1)
 
-    def test_array_compatibility_fallback_in_individual_and_group_mode(self):
+    def test_longtable_tables_compile_without_colortbl(self):
         fixture = test_gui.GuiWorkflowTests()
         fixture.setUp()
         self.addCleanup(fixture.doCleanups)
         fixture.pilot()
-        fallback = r'\makeatletter' + '\n' + r'\@ifundefined{insert@pcolumn}'
         for grouped in (False, True):
-            fixture.app.groups(fixture.ident, grouped, '1,2,3,4,5,6,7')
-            result = fixture.app.generate(fixture.ident, pdf=False)
-            data = json.loads(fixture.app.file('rendu', result['id'], 'notes.json').read_text())
-            source = render_student(data['fiches'][0], data['sujet'], config_from_mapping(data['config']))
-            self.assertLess(source.index(r'\usepackage[table]{xcolor}'), source.index(fallback))
-            self.assertIn(data['fiches'][0]['corrige_latex'], source)
-            for missing in (True, False):
-                with self.subTest(grouped=grouped, missing=missing):
-                    # Simulate either a missing helper or a package-defined implementation.
-                    setup = (r'\let\insert@pcolumn\undefined' if missing else
-                             r'\def\insert@pcolumn{\insert@column}%'
-                             '\n' + r'\let\SCsavedpcolumn\insert@pcolumn')
-                    target = r'\insert@column' if missing else r'\SCsavedpcolumn'
-                    check = (r'\makeatletter\ifx\insert@pcolumn' + target +
-                             r'\else\errmessage{Incorrect array compatibility fallback}\fi\makeatother')
-                    simulated = source.replace(fallback, r'\makeatletter' + '\n' + setup + '\n' + fallback, 1)
-                    simulated = simulated.replace(r'\begin{document}', check + '\n' + r'\begin{document}', 1)
-                    tex = fixture.root/f'array-{grouped}-{missing}.tex'
-                    tex.write_text(simulated, encoding='utf-8')
-                    pdf = PdfReader(compile_pdf(tex))
-                    self.assertGreaterEqual(len(pdf.pages), 1)
-                    self.assertIn('Conseils', '\n'.join(p.extract_text() for p in pdf.pages))
+            with self.subTest(grouped=grouped):
+                fixture.app.groups(fixture.ident, grouped, '1,2,3,4,5,6,7')
+                result = fixture.app.generate(fixture.ident, pdf=False)
+                data = json.loads(fixture.app.file('rendu', result['id'], 'notes.json').read_text())
+                source = render_student(data['fiches'][0], data['sujet'], config_from_mapping(data['config']))
+                self.assertIn(r'\usepackage{xcolor}', source)
+                self.assertIn(r'\begin{longtable}', source)
+                self.assertNotIn(r'\usepackage[table]{xcolor}', source)
+                self.assertNotIn(r'\rowcolor', source)
+                self.assertNotIn(r'\arrayrulecolor', source)
+                self.assertNotIn('insert@pcolumn', source)
+                self.assertIn(data['fiches'][0]['corrige_latex'], source)
+                tex = fixture.root / ('longtable-groupe.tex' if grouped else 'longtable-individuelle.tex')
+                tex.write_text(source, encoding='utf-8')
+                pdf = PdfReader(compile_pdf(tex))
+                self.assertGreaterEqual(len(pdf.pages), 1)
+                log = (fixture.root / (tex.stem + '.a6.log')).read_text(encoding='utf-8', errors='replace')
+                self.assertNotIn('colortbl.sty', log)
+                self.assertIn('Conseils', '\n'.join(p.extract_text() for p in pdf.pages))
 
     def test_final_pdf_skips_a_broken_copy_and_can_restore_it(self):
         fixture = test_gui.GuiWorkflowTests()
