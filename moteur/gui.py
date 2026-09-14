@@ -55,7 +55,7 @@ def make_server(app, port=0):
                 parsed=urlsplit(self.path);path=parsed.path;query=parse_qs(parsed.query)
                 if path=='/':
                     self._send(200,(WEB/'index.html').read_text(encoding='utf-8').replace('__TOKEN__',token).encode('utf-8'),'text/html; charset=utf-8')
-                elif path in {'/app.js','/style.css'}:
+                elif path in {'/app.js','/grid-preview.js','/style.css'}:
                     mime='text/javascript' if path.endswith('.js') else 'text/css'
                     self._send(200,(WEB/path[1:]).read_bytes(),mime+'; charset=utf-8')
                 elif path=='/api/home':
@@ -68,12 +68,17 @@ def make_server(app, port=0):
                     self._send(200,{'texte':text})
                 elif path=='/api/history':
                     self._send(200,app.instruction_history(query.get('classe',[''])[0]))
+                elif path=='/api/grid-preview':
+                    from .grid_preview import build_grid_preview
+                    with app.lock:
+                        preview=build_grid_preview(app,query.get('id',[''])[0])
+                    self._send(200,preview,'application/pdf')
                 elif path=='/file':
                     file=app.file(query.get('kind',[''])[0],query.get('id',[''])[0],query.get('name',[None])[0])
                     self._send(200,file.read_bytes(),mimetypes.guess_type(file.name)[0] or 'application/octet-stream')
                 else:
                     self._send(404,{'erreur':'Page introuvable'})
-            except (ValueError, OSError, sqlite3.Error) as exc:
+            except (ValueError, OSError, sqlite3.Error, RuntimeError) as exc:
                 self._send(400,{'erreur':str(exc)})
 
         def do_POST(self):
