@@ -10,11 +10,11 @@ GROUPS = {'note_individuelle': {'max': 15},
 def group_state(conn, dossier):
     subject = conn.execute('SELECT config_notes FROM sujet WHERE id=?', (dossier['sujet_id'],)).fetchone()
     cfg = json.loads(subject[0]) if subject else {}
-    members = [dict(r) for r in conn.execute('''SELECT g.numero_groupe,e.numero,e.nom,e.prenom
+    members = [dict(r) for r in conn.execute('''SELECT g.numero_groupe,e.id numero,e.nom,e.prenom
         FROM groupe g JOIN groupe_eleve ge ON ge.groupe_id=g.id JOIN eleve e ON e.id=ge.eleve_id
-        WHERE g.sujet_id=? ORDER BY g.numero_groupe,e.numero''', (dossier['sujet_id'],))]
+        WHERE g.sujet_id=? ORDER BY g.numero_groupe,e.id''', (dossier['sujet_id'],))]
     assigned = {m['numero'] for m in members}
-    missing = [r[0] for r in conn.execute('SELECT numero FROM eleve WHERE classe=? ORDER BY numero',
+    missing = [r[0] for r in conn.execute('SELECT id FROM eleve_par_classe WHERE classe=? ORDER BY id',
                                         (dossier['classe'],)) if r[0] not in assigned]
     return {'actif': cfg.get('note_groupe', {}).get('max', 0) > 0,
             'membres': members, 'sans_groupe': missing}
@@ -25,7 +25,7 @@ def save_groups(conn, dossier, active, text, individual):
         raise ValueError('Option et liste des groupes invalides')
     if not dossier['sujet_id']:
         raise ValueError('Enregistrez d’abord la grille')
-    pupils = {r['numero']: r['id'] for r in conn.execute('SELECT id,numero FROM eleve WHERE classe=?', (dossier['classe'],))}
+    pupils = {r['numero']: r['id'] for r in conn.execute('SELECT id,id numero FROM eleve_par_classe WHERE classe=?', (dossier['classe'],))}
     entries, seen = [], set()
     for line in text.splitlines():
         if not line.strip():

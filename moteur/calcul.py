@@ -16,7 +16,7 @@ def calculate(conn, sujet_id):
     ).fetchone()[0]
     if unassigned:
         raise ValueError(f'{unassigned} copie(s) non attribuée(s) à un élève')
-    copies = conn.execute('''SELECT c.*,e.numero,e.classe,v.version FROM copie c JOIN eleve e ON e.id=c.eleve_id
+    copies = conn.execute('''SELECT c.*,e.numero,e.classe,v.version FROM copie c JOIN eleve_par_classe e ON e.id=c.eleve_id AND e.classe=(SELECT classe FROM sujet WHERE id=c.sujet_id)
         LEFT JOIN version v ON v.id=c.version_id WHERE c.sujet_id=? ORDER BY e.numero''', (sujet_id,)).fetchall()
     if not copies:
         raise ValueError('Aucune copie pour ce sujet')
@@ -101,7 +101,7 @@ def _selection_individuals(conn, sujet_id, copie_ids):
     for cid in copie_ids:
         integer(cid, 'copie_id')
         copy = conn.execute('''SELECT c.*,e.numero,e.nom,e.prenom,v.version FROM copie c
-            LEFT JOIN eleve e ON e.id=c.eleve_id LEFT JOIN version v ON v.id=c.version_id
+            LEFT JOIN eleve_par_classe e ON e.id=c.eleve_id AND e.classe=(SELECT classe FROM sujet WHERE id=c.sujet_id) LEFT JOIN version v ON v.id=c.version_id
             WHERE c.id=? AND c.sujet_id=?''', (cid, sujet_id)).fetchone()
         if not copy:
             raise ValueError('Copie extérieure à cette évaluation')
@@ -142,6 +142,11 @@ def calculate_selection(conn, sujet_id, copie_ids, *, allow_groups=False):
     if grouped and not allow_groups:
         raise ValueError('Le rendu partiel exige une notation individuelle sans groupe')
     result = _selection_individuals(conn, sujet_id, copie_ids)
+    if allow_groups:
+        for row in result['notes']:
+            row['numero'] = row['eleve_id']
+            if row['eleve_id'] is not None:
+                row['label'] = f"ID {row['eleve_id']} - {row['prenom'] or ''} {row['nom'] or ''}".strip()
     if not grouped:
         return result
     cache = {r['copie_id']: r for r in result['notes']}
@@ -159,11 +164,11 @@ def calculate_selection(conn, sujet_id, copie_ids, *, allow_groups=False):
         group = groups[0]
         row['groupe'] = group['numero_groupe']
         pending = False
-        for peer in conn.execute('''SELECT e.numero,c.id,c.statut,co.id correction_id,u.a_revoir
+        for peer in conn.execute('''SELECT e.id numero,c.id,c.statut,co.id correction_id,u.a_revoir
             FROM groupe_eleve ge JOIN eleve e ON e.id=ge.eleve_id
             LEFT JOIN copie c ON c.eleve_id=e.id AND c.sujet_id=?
             LEFT JOIN correction co ON co.copie_id=c.id LEFT JOIN ui_copie u ON u.copie_id=c.id
-            WHERE ge.groupe_id=? AND ge.eleve_id<>? ORDER BY e.numero''', (sujet_id,group['id'],row['eleve_id'])):
+            WHERE ge.groupe_id=? AND ge.eleve_id<>? ORDER BY e.id''', (sujet_id,group['id'],row['eleve_id'])):
             score = None
             if peer['statut'] != 'absent':
                 if not peer['correction_id'] or peer['a_revoir']:

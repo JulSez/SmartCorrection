@@ -43,7 +43,7 @@ def run_pipeline(manifest_path, db_path, output, pdf=False, replace=False, check
             if num in seen:
                 raise ValueError(f'Correction répétée dans le manifeste : {num}')
             seen.add(num)
-            copy = conn.execute('''SELECT c.* FROM copie c JOIN eleve e ON e.id=c.eleve_id
+            copy = conn.execute('''SELECT c.* FROM copie c JOIN eleve_par_classe e ON e.id=c.eleve_id AND e.classe=(SELECT classe FROM sujet WHERE id=c.sujet_id)
                 WHERE c.sujet_id=? AND e.numero=?''', (sid, num)).fetchone()
             if not copy:
                 raise ValueError(f'Aucune copie pour le numéro {num}')
@@ -67,7 +67,7 @@ def ai_packet(conn, copy_id, classe_path=None, savoir_faire=()):
         raise ValueError('Valider la grille avant de préparer une correction IA')
     version = conn.execute('SELECT * FROM version WHERE id=?', (copy['version_id'],)).fetchone()
     corrige = conn.execute('SELECT str_latex FROM corrige WHERE version_id=?', (copy['version_id'],)).fetchone()
-    pupil = conn.execute('SELECT numero FROM eleve WHERE id=?', (copy['eleve_id'],)).fetchone() if copy['eleve_id'] else None
+    pupil = conn.execute('SELECT numero FROM eleve_par_classe WHERE id=? AND classe=(SELECT classe FROM sujet WHERE id=?)', (copy['eleve_id'],copy['sujet_id'])).fetchone() if copy['eleve_id'] else None
     pages = [row['page'] for row in conn.execute(
         'SELECT page FROM copie_page WHERE copie_id=? ORDER BY ordre', (copy_id,)
     )]
@@ -160,6 +160,8 @@ def build_parser():
             p.add_argument('file')
         if name == 'import-classe':
             p.add_argument('--classe', required=True)
+            p.add_argument('--preview', action='store_true', help='Proposer les rapprochements sans enregistrer')
+            p.add_argument('--rapprochements', help='Fichier JSON avec empreinte et rapprochements validés')
         if name in {'import-copies', 'import-correction', 'import-corrections', 'run'}:
             p.add_argument('--replace', action='store_true')
         if name in {'import-evaluation', 'run'}:
@@ -204,7 +206,17 @@ def main(argv=None):
         if command == 'init-db':
             value = {'base': str(init_db(args.db))}
         elif command == 'import-classe':
-            value = import_classe_csv(args.file, args.classe, args.db)
+            if args.preview:
+                from .import_classe import _read_roster
+                from .identites import preview_roster
+                init_db(args.db)
+                with database(args.db) as conn:
+                    conn.execute('BEGIN')
+                    value = preview_roster(conn,args.classe.strip(),_read_roster(args.file))
+            else:
+                decisions=load_json(args.rapprochements) if args.rapprochements else {}
+                value = import_classe_csv(args.file, args.classe, args.db,
+                                         choices=decisions.get('rapprochements'), fingerprint=decisions.get('empreinte'))
         elif command == 'import-copies':
             value = import_copies_csv(args.file, args.sujet, args.pdf, args.db, args.replace)
         elif command == 'import-evaluation':
@@ -259,3 +271,4 @@ def main(argv=None):
 
 if __name__ == '__main__':
     raise SystemExit(main())
+

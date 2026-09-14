@@ -216,7 +216,7 @@ class GuiWorkflowTests(unittest.TestCase):
         self.finish()
         with database(self.app.db_path) as conn:
             conn.execute('UPDATE ui_fichier SET nom=? WHERE id=?', ('Alice_Alpha_copies.pdf', self.source['id']))
-            conn.execute('UPDATE eleve SET numero=424242 WHERE classe=? AND numero=1', ('TEST',))
+            conn.execute('UPDATE eleve_classe SET numero=424242 WHERE classe=? AND numero=1', ('TEST',))
             conn.execute('UPDATE ui_copie SET a_revoir=? WHERE reference=?', ('Alice Alpha à vérifier', 'C001'))
         for stage in ('ouverture', 'grille', 'corrige', 'copies', 'correction', 'retour'):
             with self.subTest(stage=stage):
@@ -317,3 +317,4 @@ class GuiWorkflowTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

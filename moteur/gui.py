@@ -108,7 +108,7 @@ def dispatch(app,data):
     commit=data.get('valider',False)
     if type(commit) is not bool:
         raise ValueError('Validation invalide')
-    if action=='classe': return app.roster(data['classe'],data['texte'],commit)
+    if action=='classe': return app.roster(data['classe'],data['texte'],commit,data.get('rapprochements'),data.get('empreinte'))
     if action=='creer': return app.create(data['classe'],data['titre'])
     if action=='upload': return app.upload(ident,data['role'],data['nom'],data['contenu'])
     if action=='brouillon': return app.draft(ident,data['etape'],data['texte'])

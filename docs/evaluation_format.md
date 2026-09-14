@@ -16,7 +16,7 @@ peuvent être `null` sauf mention contraire. Les listes obligatoires sont non vi
 | `exercices[]` | `numero`, `questions` | `titre` |
 | `questions[]` | `numero`, `items` | `texte` |
 | `items[]` | `code`, `description`, `bareme_max` | `regle_correction` |
-| `eleves[]` | `numero` | `nom`, `prenom` |
+| `eleves[]` | `numero` | `nom`, `prenom`, `eleve_id` global déjà connu |
 | `copies[]` | `numero`, `version`, `pdf_path` si présent | `statut` (`present` par défaut ou `absent`) |
 | `groupes[]` | `numero`, `eleves` (liste de numéros) | aucun |
 
@@ -38,7 +38,7 @@ humaine (`validee: true` dans l'import ou commande `validate-grid`). Une fois ut
 structure et ses barèmes sont figés. Les grilles lisibles peuvent être exportées en Markdown
 avec les autres sorties ; le fichier Markdown de référence n'est jamais écrasé implicitement.
 
-Les élèves sont retrouvés par `(classe, numero)` ; les noms déjà présents ne sont pas écrasés.
+Les anciens imports CLI utilisent encore `(classe, numero)` dans la table des inscriptions. L’identité est désormais `eleve.id`, globale à toutes les classes. Fournir `eleve_id` pour associer explicitement une identité connue à une inscription. Sans cet ID, une identité ressemblante dans la base bloque la création : importer la classe dans l’interface pour confirmer le rapprochement. Les noms déjà présents ne sont pas écrasés.
 Chaque copie et membre doit référencer un élève déclaré dans le lot. Une seule copie par
 élève/sujet et un seul groupe par élève/sujet. Le chemin PDF est résolu depuis le dossier du
 JSON et stocké en chemin absolu. `--check-pdfs` vérifie son existence, pas la validité du PDF.
@@ -79,3 +79,4 @@ corrections et calculs) est une transaction : une erreur annule toutes les nouve
 La génération se fait dans un dossier temporaire, publié uniquement après tous les rendus réussis.
 Un arrêt matériel au moment exact de la publication des fichiers/du commit SQLite ne peut pas
 être atomique entre disque et base ; choisir alors un nouveau dossier et relancer le lot.
+

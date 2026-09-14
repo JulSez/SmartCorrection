@@ -1,12 +1,15 @@
 # Modèle SQLite et migration
 
 `moteur/schema.sql` est le schéma distribué ; `db/schema.sql` est sa copie documentaire,
-vérifiée par un test. `moteur/gui_schema.sql` ajoute les tables de l’interface. `PRAGMA user_version = 5`. Les connexions du moteur activent les clés
+vérifiée par un test. `moteur/gui_schema.sql` ajoute les tables de l’interface. `PRAGMA user_version = 6`. Les connexions du moteur activent les clés
 étrangères et sont fermées explicitement ; toute écriture d'import utilise une transaction.
 
 | Relation | Règle |
 |---|---|
-| Élève | Identité `(classe, numero)` unique ; nom/prénom facultatifs |
+| Élève | `id` global, permanent et non réutilisé ; nom/prénom facultatifs |
+| ÉlèveClasse | Inscription `(eleve_id, classe)` ; ancien numéro de liste pour compatibilité CLI |
+| ÉlèveNomImporté | Variantes de noms validées à l’import, liées au même ID |
+| ÉlèveFusion | Ancien ID, ID conservé, identité et date de consolidation |
 | Sujet → versions → corrigé | Nom de version unique par sujet, un corrigé par version |
 | Sujet → copies | Une copie par élève et sujet ; statut `present` ou `absent` |
 | Sujet → grilles | Une commune et/ou une par version ; validation pédagogique explicite |
@@ -80,3 +83,6 @@ Les réponses JSON brutes sont conservées comme brouillons et journal d’écha
 items, copies, annotations et scores **validés** utilisent les tables relationnelles communes.
 Un dossier mémorise les identifiants des consignes actives à sa création. Une nouvelle version
 de grille conserve les données de la précédente et crée de nouvelles corrections à remplir.
+
+
+Le schéma SQLite v6 migre les IDs existants sans fusion automatique. Les contraintes de copies et de groupes vérifient désormais l’inscription dans la classe. Les correspondances proposées sont locales et chaque rapprochement entre classes doit être confirmé.
