@@ -5,6 +5,8 @@ from .gui_prompts import FIXED_JSON_RULES, make_prompt as legacy_make_prompt
 from .gui_service import public_json
 from .workflow_v2 import format_description
 
+AI_DOCUMENTS = 'copies, sujet, éventuel corrigé et documents de cours de référence'
+
 
 def _format_line(state):
     layout = state.get('layout')
@@ -23,6 +25,15 @@ def _format_line(state):
             'signale plutôt si le format ou le nombre de pages paraît trop petit.')
 
 
+def _replace_document_line(text):
+    marker = 'Documents à joindre dans cette conversation : '
+    if marker not in text:
+        return text
+    before, rest = text.split(marker, 1)
+    _old, newline, tail = rest.partition('\n')
+    return before + marker + AI_DOCUMENTS + '.' + newline + tail
+
+
 def _prefix(app, ident):
     state = app.state(ident)
     d = state['dossier']
@@ -31,7 +42,6 @@ def _prefix(app, ident):
         value = state['consignes'][key]
         if value.get('texte'):
             policies.append(f"Consignes {key} :\n{value['texte']}")
-    docs = ', '.join(dict.fromkeys(f['role'] for f in state['fichiers']))
     text = (f"SmartCorrection — {d['titre']} — classe {d['classe']}\n"
             f"Dossier : {ident}. Révision de grille : {d['revision']}.\n"
             + _format_line(state) + '\n'
@@ -39,7 +49,8 @@ def _prefix(app, ident):
             'Les totaux, conversions et éventuelles notes de groupe seront calculés localement par l’application.\n\n')
     if policies:
         text += '\n\n'.join(policies) + '\n\n'
-    text += f'Documents à joindre dans cette conversation : {docs}.\n'
+    text += f'Documents à joindre dans cette conversation : {AI_DOCUMENTS}.\n'
+    text += 'Ces documents sont joints directement à la conversation IA ; ils ne sont pas téléversés dans SmartCorrection à cette étape.\n'
     text += 'Si un document nécessaire n’est pas joint ou lisible, demande-le à l’enseignant. Ne prétends pas avoir lu un document manquant.\n\n'
     return text, state
 
@@ -69,7 +80,7 @@ Avant le JSON final, discute avec l’enseignant si une version, une méthode ou
 Structure de réponse :\n''' + public_json(example)
 
     if stage == 'ouverture':
-        text = legacy_make_prompt(app, ident, stage, version, mode)
+        text = _replace_document_line(legacy_make_prompt(app, ident, stage, version, mode))
         old = ('Le parcours sera : discuter de la grille ; préparer le corrigé LaTeX ; repérer les copies et leurs pages ; '
                'corriger un échantillon de cinq copies maximum ; ajuster avec l’enseignant ; corriger le reste ; '
                'réécrire les consignes réutilisables en fin de travail.')
@@ -77,6 +88,8 @@ Structure de réponse :\n''' + public_json(example)
                'discuter et valider la grille avec un aperçu progressivement rempli ; prétraiter le paquet ; corriger quelques copies ; corriger le lot ; '
                'puis récupérer le document final, le tableau des notes et le retour d’expérience.')
         text = text.replace(old, new)
+        text = text.replace('L’enseignant joint le paquet PDF entier, le sujet, une correction si disponible et les cours ou modèles utiles.',
+                            'L’enseignant joint directement à cette conversation IA le paquet PDF entier, le sujet, un corrigé s’il existe et les documents de cours de référence utiles.')
         return _format_line(state) + '\n\n' + text
 
     text = legacy_make_prompt(app, ident, stage, version, mode)

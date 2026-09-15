@@ -25,7 +25,9 @@ class Pr17Tests(unittest.TestCase):
         source = compact_corrige_source(student, {'titre': 'Interro 1', 'classe': 'TEST'}, cfg)
         corrige = source.split(r'\def\SCpanel{Corrigé}', 1)[1]
         self.assertNotIn(r'\SCtitle{Corrigé}', corrige)
-        self.assertIn(r'Corrigé}\enspace ; \enspace Interro 1 \enspace / \enspace \textbf{Version :} B\par', corrige)
+        self.assertIn(r'{\bfseries\color{SCblue} Corrigé}\par\vspace{2mm}', corrige)
+        self.assertNotIn('Interro 1', corrige.split('\n', 3)[1])
+        self.assertNotIn(r'\textbf{Version :}', corrige.split('\n', 3)[1])
         self.assertNotIn(r'\textbf{Classe :}', corrige.split('\n', 3)[1])
 
     def test_verified_corriges_json_becomes_preview_draft_without_being_committed(self):
