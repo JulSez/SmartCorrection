@@ -10,6 +10,7 @@ from . import pr20_patch as previous
 
 WorkflowApplication = previous.WorkflowApplication
 _BASE_STATE = WorkflowApplication.state
+_BASE_REVIEW = WorkflowApplication.review
 
 
 def _validate_preprocessing(data, dossier, anonymous=True):
@@ -70,11 +71,10 @@ def _state(self, ident):
     result = _BASE_STATE(self, ident)
     with database(self.db_path) as conn:
         dossier = self._dossier(conn, ident)
-        students = [dict(r) for r in conn.execute(
+        result['eleves'] = [dict(r) for r in conn.execute(
             'SELECT id,nom,prenom FROM eleve_par_classe WHERE classe=? ORDER BY nom COLLATE NOCASE,prenom COLLATE NOCASE,id',
             (dossier['classe'],)
         )]
-        result['eleves'] = students
         prep = result.get('pretraitement')
         if prep:
             for item in prep.get('copies', []):
@@ -86,10 +86,8 @@ def _state(self, ident):
 
 
 def _assign_student(self, ident, reference, eleve_id=None):
-    if not isinstance(reference, str) or not re.fullmatch(r'C\d{3,6}', reference):
+    if not re.fullmatch(r'C\d{3,6}', reference or ''):
         raise ValueError('Référence de copie invalide')
-    if eleve_id is not None and type(eleve_id) is not int:
-        raise ValueError('Élève invalide')
     with database(self.db_path) as conn:
         conn.execute('BEGIN IMMEDIATE')
         dossier = self._dossier(conn, ident)
@@ -108,13 +106,11 @@ def _assign_student(self, ident, reference, eleve_id=None):
                 if other is not target and other.get('eleve_id') == eleve_id:
                     raise ValueError('Cet élève est déjà affecté à une autre copie')
             target['eleve_id'] = eleve_id
-            target['nom'] = student['nom']
-            target['prenom'] = student['prenom']
+            target['nom'] = student['nom']; target['prenom'] = student['prenom']
         else:
             target.pop('eleve_id', None)
             if not previous._anonymity(conn, ident):
-                target['nom'] = None
-                target['prenom'] = None
+                target['nom'] = None; target['prenom'] = None
         conn.execute('UPDATE ui_meta SET valeur=? WHERE cle=?',
                      (json.dumps(prep, ensure_ascii=False), previous._meta_key(ident)))
         linked = conn.execute('''SELECT c.id FROM ui_copie u JOIN copie c ON c.id=u.copie_id
@@ -124,9 +120,20 @@ def _assign_student(self, ident, reference, eleve_id=None):
     return {'reference': reference, 'eleve_id': eleve_id}
 
 
-# Keep the original automatic matcher available, then relax validation and prioritize manual assignment.
+def _review(self, ident, reference):
+    if isinstance(reference, str) and reference.startswith('@affectation:'):
+        parts = reference.split(':', 2)
+        if len(parts) != 3:
+            raise ValueError('Affectation invalide')
+        copy_ref, raw = parts[1], parts[2]
+        eleve_id = None if raw == '' else int(raw)
+        return _assign_student(self, ident, copy_ref, eleve_id)
+    return _BASE_REVIEW(self, ident, reference)
+
+
 previous._match_student_original = previous._match_student
 previous._validate_preprocessing = _validate_preprocessing
 previous._match_student = _match_student
 WorkflowApplication.state = _state
 WorkflowApplication.assign_student = _assign_student
+WorkflowApplication.review = _review
