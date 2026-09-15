@@ -99,7 +99,6 @@ def _assign_student(self, ident, reference, eleve_id=None):
         target = next((c for c in prep.get('copies', []) if c.get('reference') == reference), None)
         if not target:
             raise ValueError('Copie inconnue')
-        student = None
         if eleve_id is not None:
             student = conn.execute('SELECT id,nom,prenom FROM eleve_par_classe WHERE classe=? AND id=?',
                                    (dossier['classe'], eleve_id)).fetchone()
@@ -113,7 +112,7 @@ def _assign_student(self, ident, reference, eleve_id=None):
             target['prenom'] = student['prenom']
         else:
             target.pop('eleve_id', None)
-            if not self.state(ident).get('anonymat', True):
+            if not previous._anonymity(conn, ident):
                 target['nom'] = None
                 target['prenom'] = None
         conn.execute('UPDATE ui_meta SET valeur=? WHERE cle=?',
