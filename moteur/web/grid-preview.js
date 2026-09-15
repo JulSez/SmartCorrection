@@ -1,27 +1,43 @@
 'use strict';
 
-function showGridBlankPreview(){
- if(!state?.dossier?.revision)return;
- if(homeData?.latex===false){toast('Grille enregistrée. Installez LaTeX pour afficher la feuille de correction vierge.',true);return;}
- const url='/api/grid-preview?id='+encodeURIComponent(state.dossier.id)+'&revision='+encodeURIComponent(state.dossier.revision);
- showModal(`<div class="eyebrow">Grille enregistrée</div><h1>Feuille de correction vierge</h1><p class="lede">Vérifiez maintenant que les critères tiennent correctement sur la fiche. Les notes et retours sont volontairement vides.</p><div class="actions"><a href="${url}" target="_blank" rel="noopener">Ouvrir dans un onglet ↗</a></div><iframe title="Aperçu vierge de la feuille de correction" class="pdf-viewer" src="${url}"></iframe>`,true);
+// Loaded after workflow-v2.js. Keep PDF display in one place so Firefox does not
+// depend on iframe handling of application/pdf responses.
+function pdfObject(url,title){
+ return `<object class="pdf-viewer" data="${url}" type="application/pdf" aria-label="${esc(title)}"><div class="notice warning">Le navigateur n’affiche pas le PDF intégré. <a href="${url}" target="_blank" rel="noopener">Ouvrir le rendu dans un onglet ↗</a></div></object>`;
 }
 
-const renderGridWithoutPreview=renderGrid;
-renderGrid=function(){
- renderGridWithoutPreview();
- if(!state.grille.length)return;
- const card=document.createElement('div');
- card.className='card';
- card.innerHTML='<h2>Vérifier la taille de la fiche</h2><p class="help">La feuille vierge utilise la grille enregistrée et le même format que les corrections finales.</p><div class="actions"><button id="blank-grid-preview">Voir la feuille de correction vierge</button></div>';
- $('#main').appendChild(card);
- $('#blank-grid-preview').onclick=showGridBlankPreview;
+showCorrigePreview=function(){
+ const url='/api/corrige-preview?id='+encodeURIComponent(state.dossier.id);
+ showModal(`<div class="eyebrow">Corrigés</div><h1>Valider le rendu</h1><p class="lede">Vérifiez directement le corrigé dans le format choisi avant de l’enregistrer.</p><div class="actions"><a href="${url}" target="_blank" rel="noopener">Ouvrir dans un onglet ↗</a></div>${pdfObject(url,'Aperçu du corrigé')}`,true);
 };
 
-const submitResponseWithoutGridPreview=submitResponse;
+showGridPreviewV2=function(){
+ const url='/api/grid-preview?id='+encodeURIComponent(state.dossier.id)+'&revision='+encodeURIComponent(state.dossier.revision);
+ showModal(`<div class="eyebrow">Grille enregistrée</div><h1>Correction vide + corrigé</h1><p class="lede">Vérifiez la densité réelle du document avant de traiter les copies.</p><div class="actions"><a href="${url}" target="_blank" rel="noopener">Ouvrir dans un onglet ↗</a></div>${pdfObject(url,'Aperçu de la feuille de correction et du corrigé')}`,true);
+};
+
+const submitResponseBeforePr17=submitResponse;
 submitResponse=async function(commit){
  const stage=$('#response')?.dataset.stage;
- const revision=state?.dossier?.revision??0;
- await submitResponseWithoutGridPreview(commit);
- if(commit&&stage==='grille'&&state?.dossier?.revision>revision)showGridBlankPreview();
+ const text=$('#response')?.value;
+ await submitResponseBeforePr17(commit);
+ // Dès que le JSON des corrigés passe la validation syntaxique/pédagogique,
+ // afficher le vrai PDF. Il s'agit encore du brouillon : l'utilisateur garde
+ // explicitement le bouton de validation pour l'enregistrer.
+ if(!commit&&stage==='corriges'&&lastPreview&&previewText===text){
+  showCorrigePreview();
+ }
+};
+
+// Le cas normal est un collage depuis l'IA : supprimer le clic intermédiaire
+// « Vérifier ». Le bouton reste disponible pour une saisie ou une réparation manuelle.
+const bindCommonBeforePr17=bindCommon;
+bindCommon=function(){
+ bindCommonBeforePr17();
+ const response=$('#response');
+ if(response?.dataset.stage==='corriges'){
+  response.addEventListener('paste',()=>setTimeout(()=>{
+   if(!busy&&response.value.trim())submitResponse(false);
+  },0),{once:true});
+ }
 };

@@ -30,7 +30,7 @@ test('final step groups document notes and feedback', () => {
   assert.match(source, /exchangePanel\('retour'/);
 });
 
-test('workflow overlay is loaded after the legacy and grid preview scripts', () => {
-  assert.ok(index.indexOf('/app.js') < index.indexOf('/grid-preview.js'));
-  assert.ok(index.indexOf('/grid-preview.js') < index.indexOf('/workflow-v2.js'));
+test('PR17 preview overlay is loaded after workflow v2', () => {
+  assert.ok(index.indexOf('/app.js') < index.indexOf('/workflow-v2.js'));
+  assert.ok(index.indexOf('/workflow-v2.js') < index.indexOf('/grid-preview.js'));
 });
