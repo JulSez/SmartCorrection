@@ -34,6 +34,14 @@ def _replace_document_line(text):
     return before + marker + AI_DOCUMENTS + '.' + newline + tail
 
 
+def _identity_instruction(state):
+    if state.get('anonymat', True):
+        return ('MODE ANONYME ACTIF : n’écris aucun nom ni prénom d’élève dans les réponses structurées. '
+                'Repère les copies uniquement avec C001, C002, etc.')
+    return ('MODE NON ANONYME ACTIF : lis le nom et le prénom présents sur chaque copie et restitue-les directement '
+            'dans le JSON de prétraitement. Ne devine jamais une identité illisible et ne remplace pas un nom par un numéro.')
+
+
 def _prefix(app, ident):
     state = app.state(ident)
     d = state['dossier']
@@ -45,6 +53,7 @@ def _prefix(app, ident):
     text = (f"SmartCorrection — {d['titre']} — classe {d['classe']}\n"
             f"Dossier : {ident}. Révision de grille : {d['revision']}.\n"
             + _format_line(state) + '\n'
+            + _identity_instruction(state) + '\n'
             'Tu échanges avec l’enseignant dans cette conversation. Les décisions explicites de cette évaluation prévalent. '
             'Les totaux, conversions et éventuelles notes de groupe seront calculés localement par l’application.\n\n')
     if policies:
@@ -61,15 +70,25 @@ def make_prompt(app, ident, stage, version=None, mode='echantillon'):
     if stage == 'pretraitement':
         prefix, state = _prefix(app, ident)
         d = state['dossier']
+        if state.get('anonymat', True):
+            copy_example = {'reference': 'C001', 'numero': None, 'version': 'A', 'pages': [1, 2]}
+            identity_text = ('Ne mets aucun nom, prénom ni numéro d’élève : numero doit rester null. '
+                             'N’invente aucune absence : absents reste vide.')
+        else:
+            copy_example = {'reference': 'C001', 'numero': None, 'nom': 'DUPONT', 'prenom': 'Alice',
+                            'version': 'A', 'pages': [1, 2]}
+            identity_text = ('Pour chaque copie, relève directement le nom et le prénom visibles sur la copie dans les champs nom et prenom. '
+                             'Respecte l’orthographe lue ; ne devine pas une identité. numero reste null. '
+                             'N’invente aucune absence : absents reste vide.')
         example = {
             'dossier': ident,
             'revision': d['revision'],
-            'copies': [{'reference': 'C001', 'numero': None, 'version': 'A', 'pages': [1, 2]}],
+            'copies': [copy_example],
             'pages_ignorees': [{'page': 3, 'motif': 'page blanche'}],
             'absents': [],
         }
-        return prefix + FIXED_JSON_RULES + '''\nÀ partir du paquet de copies déjà lu dans cette conversation, rends maintenant le prétraitement structuré.
-Repère chaque copie, ses pages physiques et sa version probable. Utilise des références C001, C002, etc. Ne mets aucun nom, prénom ni numéro d’élève : numero doit rester null. N’invente aucune absence : absents reste vide.
+        return prefix + FIXED_JSON_RULES + f'''\nÀ partir du paquet de copies déjà lu dans cette conversation, rends maintenant le prétraitement structuré.
+Repère chaque copie, ses pages physiques et sa version probable. Utilise des références C001, C002, etc. {identity_text}
 
 Tu as déjà effectué une première lecture transversale des copies. Conserve dans le contexte de cette conversation une synthèse de travail des erreurs fréquentes, méthodes réellement utilisées, confusions récurrentes et difficultés de rédaction. Cette synthèse ne doit pas apparaître dans le JSON ci-dessous, mais elle devra être réutilisée pour construire ensuite le corrigé de référence et la grille de correction.
 
@@ -112,7 +131,7 @@ Structure de réponse :\n''' + public_json(example)
                             'L’enseignant joint directement à cette conversation IA le paquet PDF entier, le sujet, un corrigé s’il existe et les documents de cours de référence utiles.')
         text = text.replace('Pour l’instant, vérifie les documents disponibles, repère les versions du sujet et demande seulement les précisions nécessaires.',
                             'Pour l’instant, vérifie les documents disponibles et repère les versions du sujet. Fais aussi une première lecture transversale du paquet de copies : repère les limites de chaque copie, leurs pages et leur version probable. En parallèle, conserve dans le contexte de cette conversation une synthèse de travail des erreurs communes, méthodes utilisées et difficultés de rédaction observées. Ne produis pas de notes individuelles. Cette synthèse servira ensuite au corrigé de référence et à la grille. Demande seulement les précisions nécessaires.')
-        return _format_line(state) + '\n\n' + text
+        return _format_line(state) + '\n' + _identity_instruction(state) + '\n\n' + text
 
     text = legacy_make_prompt(app, ident, stage, version, mode)
     if stage == 'grille':
@@ -122,4 +141,4 @@ Structure de réponse :\n''' + public_json(example)
                 + public_json(versions) + '. Le JSON de grille peut conserver le champ versions pour compatibilité, mais il doit reprendre exactement cette liste. '
                 'Utilise aussi la première lecture transversale des copies de l’étape 1 pour identifier les erreurs fréquentes et calibrer des critères utiles, sans surpondérer un cas particulier ni inventer une règle non validée par l’enseignant.')
         text += note
-    return _format_line(state) + '\n\n' + text
+    return _format_line(state) + '\n' + _identity_instruction(state) + '\n\n' + text
