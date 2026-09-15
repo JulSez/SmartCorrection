@@ -24,10 +24,12 @@ class Pr20HotfixTests(unittest.TestCase):
         self.assertIn('Étape 1/6', source)
         self.assertNotIn('Importer le prétraitement', source)
 
-    def test_hotfix_loads_after_layout_layer(self):
+    def test_hotfix_loads_after_layout_layer_and_is_served(self):
         root = Path(__file__).resolve().parents[1]
         index = (root/'moteur'/'web'/'index.html').read_text(encoding='utf-8')
+        gui = (root/'moteur'/'gui.py').read_text(encoding='utf-8')
         self.assertLess(index.index('/layout-v3.js'), index.index('/hotfix-pr20.js'))
+        self.assertIn("'/hotfix-pr20.js'", gui)
 
     def test_opening_prompt_starts_first_reading_and_common_error_analysis(self):
         prompt = make_prompt(self.app, self.ident, 'ouverture')
