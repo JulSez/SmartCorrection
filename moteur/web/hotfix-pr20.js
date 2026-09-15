@@ -2,6 +2,8 @@
 
 // PR20 hotfix: documents are attached directly to the IA conversation, so
 // navigation must never depend on an uploaded subject inside SmartCorrection.
+stages[3]='Importer le prétraitement';
+
 const pr20GoStepBase=goStep;
 goStep=async function(i){
  const next=Math.max(0,Math.min(6,i));
@@ -11,7 +13,7 @@ goStep=async function(i){
   let latest=await get('/api/dossier?id='+state.dossier.id);
   if(next>1&&!latest.corriges_valides)throw new Error('Validez tous les corrigés avant de passer à la grille.');
   if(next>2&&!latest.grille.length)throw new Error('Validez la grille et son aperçu avant de poursuivre.');
-  if(next>3&&!latest.copies.length)throw new Error('Enregistrez le prétraitement des copies avant de corriger.');
+  if(next>3&&!latest.copies.length)throw new Error('Importez le prétraitement des copies avant de corriger.');
   if(next>4&&(current===4||!latest.dossier.echantillon_valide)){
    const selected=references??latest.copies.filter(c=>c.echantillon).map(c=>c.reference);
    await post({action:'echantillon',dossier:latest.dossier.id,references:selected,valider:true});
