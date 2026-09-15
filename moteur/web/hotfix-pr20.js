@@ -26,19 +26,41 @@ function bindAnonymity(){
  });
 }
 
+function assignmentPanel(prep){
+ if(!prep)return '';
+ const students=state.eleves||[];
+ const rows=prep.copies.map(c=>{
+  const read=[c.prenom,c.nom].filter(Boolean).join(' ')||'Non reconnu par l’IA';
+  const options=['<option value="">— Non attribuée —</option>'].concat(students.map(s=>`<option value="${s.id}" ${Number(c.eleve_id)===Number(s.id)?'selected':''}>${esc(s.nom)} ${esc(s.prenom)}</option>`)).join('');
+  return `<tr><td><strong>${esc(c.reference)}</strong><br><small>p. ${c.pages.join(', ')} · version ${esc(c.version)}</small></td><td>${esc(read)}</td><td><select class="copy-student" data-reference="${esc(c.reference)}">${options}</select></td></tr>`;
+ }).join('');
+ return `<div class="card"><h3>Affectation locale des élèves</h3><p class="help">Une copie peut rester sans élève. Si l’IA se trompe ou ne lit pas le nom, choisissez simplement l’élève ici. Cette liste reste locale et n’est pas envoyée à l’IA.</p><div class="table-wrap"><table><thead><tr><th>Copie</th><th>Nom lu par l’IA</th><th>Élève</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+function bindAssignments(){
+ document.querySelectorAll('.copy-student').forEach(select=>select.onchange=()=>task(async()=>{
+  const ref=select.dataset.reference;
+  const value=select.value;
+  await post({action:'revue',dossier:state.dossier.id,reference:'@affectation:'+ref+':'+value});
+  state=await get('/api/dossier?id='+state.dossier.id);
+  renderDossier();
+  toast(value?'Élève affecté à '+ref+'.':ref+' reste sans élève.');
+ }));
+}
+
 renderSetup=function(){
  const prep=state.pretraitement;
  const names=state.anonymat===false;
  $('#main').innerHTML=`<div class="page-head"><div><div class="eyebrow">${esc(state.dossier.classe)}</div><h1>Étape 1/6</h1><p class="lede">Choisissez le format, préparez les documents puis initialisez l’IA et récupérez le résultat de cette première lecture.</p></div><span class="badge">${esc(state.dossier.titre)}</span></div>`+
  layoutCard('setup')+
  `<div class="card"><div class="eyebrow">2. Préparation des documents</div><h2>Documents à joindre à l’IA</h2><p class="help">Aucun upload dans SmartCorrection. Joignez directement ces fichiers dans la conversation IA.</p><ul class="doc-list"><li><span>▤</span><div class="grow"><strong>Copies</strong><small>Le paquet PDF complet, non découpé.</small></div></li><li><span>▤</span><div class="grow"><strong>Sujet</strong><small>Le sujet de l’évaluation avec toutes ses versions.</small></div></li><li><span>▤</span><div class="grow"><strong>Corrigé éventuel</strong><small>Seulement s’il existe déjà.</small></div></li><li><span>▤</span><div class="grow"><strong>Documents de cours de référence</strong><small>Savoir-faire, cours, modèles de rédaction ou documents utiles.</small></div></li></ul>${anonymityControl()}</div>`+
- `<div class="card"><div class="eyebrow">3. Initialisation de l’IA</div><h2>Première lecture des copies</h2><p class="help">Joignez les documents ci-dessus, puis copiez la consigne ci-dessous dans l’IA. Elle repère immédiatement les copies, leurs versions probables et les erreurs communes ; cette première lecture servira ensuite au corrigé et à la grille.${names?' Le mode anonymat est désactivé : l’IA conserve aussi les noms/prénoms lus sur les copies.':''}</p><h3>Consigne à copier dans l’IA</h3><textarea id="opening" aria-label="Consigne de démarrage pour l’IA" readonly placeholder="Chargement de la consigne…"></textarea><div class="actions"><button class="primary" id="copy-opening" disabled>Copier</button></div><p class="help">Gardez cette même conversation pour toutes les étapes suivantes.</p></div>`+
- `<div class="card"><div class="eyebrow">4. Résultats de l’initialisation</div><h2>Prétraitement des copies</h2><p class="help">Après la première lecture, demandez à l’IA son JSON de repérage des copies puis collez-le ci-dessous.${names?' Le JSON contient également les noms et prénoms lus sur chaque copie.':''} Aucun PDF n’est importé dans SmartCorrection.</p>`+
- exchangePanel('pretraitement','Résultat de l’initialisation au format JSON',names?'Le JSON contient les copies, leurs noms/prénoms, leurs pages, leur version probable et les pages ignorées.':'Le JSON contient les copies repérées, leurs pages, leur version probable et les pages ignorées.')+
+ `<div class="card"><div class="eyebrow">3. Initialisation de l’IA</div><h2>Première lecture des copies</h2><p class="help">Joignez les documents ci-dessus, puis copiez la consigne ci-dessous dans l’IA. Elle repère immédiatement les copies, leurs versions probables et les erreurs communes ; cette première lecture servira ensuite au corrigé et à la grille.${names?' Le mode anonymat est désactivé : l’IA conserve aussi les noms/prénoms qu’elle arrive à lire sur les copies.':''}</p><h3>Consigne à copier dans l’IA</h3><textarea id="opening" aria-label="Consigne de démarrage pour l’IA" readonly placeholder="Chargement de la consigne…"></textarea><div class="actions"><button class="primary" id="copy-opening" disabled>Copier</button></div><p class="help">Gardez cette même conversation pour toutes les étapes suivantes.</p></div>`+
+ `<div class="card"><div class="eyebrow">4. Résultats de l’initialisation</div><h2>Prétraitement des copies</h2><p class="help">Après la première lecture, demandez à l’IA son JSON de repérage des copies puis collez-le ci-dessous.${names?' Les noms/prénoms peuvent être absents si l’IA ne les lit pas.':''} Aucun PDF n’est importé dans SmartCorrection.</p>`+
+ exchangePanel('pretraitement','Résultat de l’initialisation au format JSON',names?'Le JSON contient les copies, les noms/prénoms lisibles s’ils sont connus, leurs pages, leur version probable et les pages ignorées.':'Le JSON contient les copies repérées, leurs pages, leur version probable et les pages ignorées.')+
  (prep?`<div class="notice success">Prétraitement enregistré : ${prep.copies.length} copie(s). Il sera appliqué automatiquement à la validation de la grille.</div>`:'')+
- `</div><div class="notice">Les consignes générales et celles de cette classe sont intégrées automatiquement au texte copié.</div><button id="view-policies">Voir les consignes mémorisées</button>`;
+ `</div>`+assignmentPanel(prep)+`<div class="notice">Les consignes générales et celles de cette classe sont intégrées automatiquement au texte copié.</div><button id="view-policies">Voir les consignes mémorisées</button>`;
  bindLayout('setup');
  bindAnonymity();
+ bindAssignments();
  loadPrompt('ouverture','#opening','#copy-opening');
  $('#view-policies').onclick=policiesModal;
 };
