@@ -7,21 +7,36 @@ stages.splice(0,stages.length,
 const pr20RenderPreviewBase=renderPreview;
 renderPreview=function(stage,r,text){
  if(stage!=='pretraitement')return pr20RenderPreviewBase(stage,r,text);
- $('#preview').innerHTML=`<div class="card"><h2>Relire le prétraitement</h2><p class="success">${r.copies} copie(s) repérée(s) · ${r.pages_ignorees} page(s) ignorée(s).</p><p class="help">Ce repérage sera appliqué automatiquement dès que la grille sera validée.</p></div>`;
+ const identified=r.identifiees?` · ${r.identifiees} élève(s) identifié(s)`:'';
+ $('#preview').innerHTML=`<div class="card"><h2>Relire le prétraitement</h2><p class="success">${r.copies} copie(s) repérée(s) · ${r.pages_ignorees} page(s) ignorée(s)${identified}.</p><p class="help">Ce repérage sera appliqué automatiquement dès que la grille sera validée.</p></div>`;
 };
+
+function anonymityControl(){
+ const anonymous=state.anonymat!==false;
+ const locked=state.copies&&state.copies.length;
+ const warning=state.pretraitement&&!locked?'<p class="help warning">Changer ce choix effacera le résultat d’initialisation déjà enregistré.</p>':'';
+ return `<div class="field"><label for="anonymity-mode">Identité des élèves</label><select id="anonymity-mode" ${locked?'disabled':''}><option value="anonymous" ${anonymous?'selected':''}>Anonymat activé (défaut)</option><option value="named" ${!anonymous?'selected':''}>Anonymat désactivé — l’IA renvoie les noms</option></select><small>${anonymous?'Les JSON utilisent seulement C001, C002…':'L’IA lit nom et prénom sur chaque copie ; SmartCorrection les rapproche ensuite de la liste de classe.'}</small>${warning}</div>`;
+}
 
 renderSetup=function(){
  const prep=state.pretraitement;
  $('#main').innerHTML=`<div class="page-head"><div><div class="eyebrow">${esc(state.dossier.classe)}</div><h1>Étape 1/6</h1><p class="lede">Choisissez le format, préparez les documents puis initialisez l’IA et récupérez le résultat de cette première lecture.</p></div><span class="badge">${esc(state.dossier.titre)}</span></div>`+
  layoutCard('setup')+
  `<div class="card"><div class="eyebrow">2. Préparation des documents</div><h2>Documents à joindre à l’IA</h2><p class="help">Aucun upload dans SmartCorrection. Joignez directement ces fichiers dans la conversation IA.</p><ul class="doc-list"><li><span>▤</span><div class="grow"><strong>Copies</strong><small>Le paquet PDF complet, non découpé.</small></div></li><li><span>▤</span><div class="grow"><strong>Sujet</strong><small>Le sujet de l’évaluation avec toutes ses versions.</small></div></li><li><span>▤</span><div class="grow"><strong>Corrigé éventuel</strong><small>Seulement s’il existe déjà.</small></div></li><li><span>▤</span><div class="grow"><strong>Documents de cours de référence</strong><small>Savoir-faire, cours, modèles de rédaction ou documents utiles.</small></div></li></ul></div>`+
- `<div class="card"><div class="eyebrow">3. Initialisation de l’IA</div><h2>Première lecture des copies</h2><p class="help">Joignez les documents ci-dessus, puis copiez la consigne ci-dessous dans l’IA. Elle repère immédiatement les copies, leurs versions probables et les erreurs communes ; cette première lecture servira ensuite au corrigé et à la grille.</p><h3>Consigne à copier dans l’IA</h3><textarea id="opening" aria-label="Consigne de démarrage pour l’IA" readonly placeholder="Chargement de la consigne…"></textarea><div class="actions"><button class="primary" id="copy-opening" disabled>Copier</button></div><p class="help">Gardez cette même conversation pour toutes les étapes suivantes.</p></div>`+
- `<div class="card"><div class="eyebrow">4. Résultats de l’initialisation</div><h2>Prétraitement des copies</h2><p class="help">Après la première lecture, demandez à l’IA son JSON de repérage des copies puis collez-le ci-dessous. Aucun PDF n’est importé dans SmartCorrection.</p>`+
+ `<div class="card"><div class="eyebrow">3. Initialisation de l’IA</div><h2>Première lecture des copies</h2>${anonymityControl()}<p class="help">Joignez les documents ci-dessus, puis copiez la consigne ci-dessous dans l’IA. Elle repère immédiatement les copies, leurs versions probables et les erreurs communes ; cette première lecture servira ensuite au corrigé et à la grille.</p><h3>Consigne à copier dans l’IA</h3><textarea id="opening" aria-label="Consigne de démarrage pour l’IA" readonly placeholder="Chargement de la consigne…"></textarea><div class="actions"><button class="primary" id="copy-opening" disabled>Copier</button></div><p class="help">Gardez cette même conversation pour toutes les étapes suivantes.</p></div>`+
+ `<div class="card"><div class="eyebrow">4. Résultats de l’initialisation</div><h2>Prétraitement des copies</h2><p class="help">Après la première lecture, demandez à l’IA son JSON de repérage des copies puis collez-le ci-dessous. ${state.anonymat===false?'En mode non anonyme, chaque copie contient aussi nom et prénom.':'En mode anonyme, aucune identité ne doit apparaître dans ce JSON.'}</p>`+
  exchangePanel('pretraitement','Résultat de l’initialisation au format JSON','Le JSON contient les copies repérées, leurs pages, leur version probable et les pages ignorées.')+
  (prep?`<div class="notice success">Prétraitement enregistré : ${prep.copies.length} copie(s). Il sera appliqué automatiquement à la validation de la grille.</div>`:'')+
  `</div><div class="notice">Les consignes générales et celles de cette classe sont intégrées automatiquement au texte copié.</div><button id="view-policies">Voir les consignes mémorisées</button>`;
  bindLayout('setup');
  loadPrompt('ouverture','#opening','#copy-opening');
+ const anonymity=$('#anonymity-mode');
+ if(anonymity&&!anonymity.disabled)anonymity.onchange=()=>task(async()=>{
+  const active=anonymity.value==='anonymous';
+  const r=await post({action:'anonymat',dossier:state.dossier.id,actif:active});
+  state=await get('/api/dossier?id='+state.dossier.id);renderDossier();
+  toast(r.pretraitement_invalide?'Mode changé. Le résultat d’initialisation doit être régénéré.':'Mode d’identité enregistré.');
+ });
  $('#view-policies').onclick=policiesModal;
 };
 
