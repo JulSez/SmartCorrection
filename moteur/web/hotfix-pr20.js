@@ -10,17 +10,35 @@ renderPreview=function(stage,r,text){
  $('#preview').innerHTML=`<div class="card"><h2>Relire le prétraitement</h2><p class="success">${r.copies} copie(s) repérée(s) · ${r.pages_ignorees} page(s) ignorée(s).</p><p class="help">Ce repérage sera appliqué automatiquement dès que la grille sera validée.</p></div>`;
 };
 
+function anonymityControl(){
+ const anonymous=state.anonymat!==false;
+ const locked=!!state.pretraitement;
+ return `<div class="field"><label for="ai-anonymity">Identité des élèves dans l’IA</label><select id="ai-anonymity" ${locked?'disabled':''}><option value="1" ${anonymous?'selected':''}>Mode anonymat — références C001, C002…</option><option value="0" ${!anonymous?'selected':''}>Anonymat désactivé — noms/prénoms visibles par l’IA</option></select><small>${anonymous?'Les noms visibles sur les copies ne doivent pas être restitués par l’IA.':'Les noms/prénoms visibles sur les copies peuvent être lus, restitués et utilisés dans les corrections.'}${locked?' Ce choix est verrouillé après validation des résultats de l’initialisation.':''}</small></div>`;
+}
+function bindAnonymity(){
+ const select=$('#ai-anonymity');if(!select||select.disabled)return;
+ select.onchange=()=>task(async()=>{
+  const actif=select.value==='1';
+  await post({action:'anonymat',dossier:state.dossier.id,actif});
+  state=await get('/api/dossier?id='+state.dossier.id);
+  renderDossier();
+  toast(actif?'Mode anonymat activé.':'Anonymat désactivé : l’IA peut utiliser les noms des élèves.');
+ });
+}
+
 renderSetup=function(){
  const prep=state.pretraitement;
+ const names=state.anonymat===false;
  $('#main').innerHTML=`<div class="page-head"><div><div class="eyebrow">${esc(state.dossier.classe)}</div><h1>Étape 1/6</h1><p class="lede">Choisissez le format, préparez les documents puis initialisez l’IA et récupérez le résultat de cette première lecture.</p></div><span class="badge">${esc(state.dossier.titre)}</span></div>`+
  layoutCard('setup')+
- `<div class="card"><div class="eyebrow">2. Préparation des documents</div><h2>Documents à joindre à l’IA</h2><p class="help">Aucun upload dans SmartCorrection. Joignez directement ces fichiers dans la conversation IA.</p><ul class="doc-list"><li><span>▤</span><div class="grow"><strong>Copies</strong><small>Le paquet PDF complet, non découpé.</small></div></li><li><span>▤</span><div class="grow"><strong>Sujet</strong><small>Le sujet de l’évaluation avec toutes ses versions.</small></div></li><li><span>▤</span><div class="grow"><strong>Corrigé éventuel</strong><small>Seulement s’il existe déjà.</small></div></li><li><span>▤</span><div class="grow"><strong>Documents de cours de référence</strong><small>Savoir-faire, cours, modèles de rédaction ou documents utiles.</small></div></li></ul></div>`+
- `<div class="card"><div class="eyebrow">3. Initialisation de l’IA</div><h2>Première lecture des copies</h2><p class="help">Joignez les documents ci-dessus, puis copiez la consigne ci-dessous dans l’IA. Elle repère immédiatement les copies, leurs versions probables et les erreurs communes ; cette première lecture servira ensuite au corrigé et à la grille.</p><h3>Consigne à copier dans l’IA</h3><textarea id="opening" aria-label="Consigne de démarrage pour l’IA" readonly placeholder="Chargement de la consigne…"></textarea><div class="actions"><button class="primary" id="copy-opening" disabled>Copier</button></div><p class="help">Gardez cette même conversation pour toutes les étapes suivantes.</p></div>`+
- `<div class="card"><div class="eyebrow">4. Résultats de l’initialisation</div><h2>Prétraitement des copies</h2><p class="help">Après la première lecture, demandez à l’IA son JSON de repérage des copies puis collez-le ci-dessous. Aucun PDF n’est importé dans SmartCorrection.</p>`+
- exchangePanel('pretraitement','Résultat de l’initialisation au format JSON','Le JSON contient les copies repérées, leurs pages, leur version probable et les pages ignorées.')+
+ `<div class="card"><div class="eyebrow">2. Préparation des documents</div><h2>Documents à joindre à l’IA</h2><p class="help">Aucun upload dans SmartCorrection. Joignez directement ces fichiers dans la conversation IA.</p><ul class="doc-list"><li><span>▤</span><div class="grow"><strong>Copies</strong><small>Le paquet PDF complet, non découpé.</small></div></li><li><span>▤</span><div class="grow"><strong>Sujet</strong><small>Le sujet de l’évaluation avec toutes ses versions.</small></div></li><li><span>▤</span><div class="grow"><strong>Corrigé éventuel</strong><small>Seulement s’il existe déjà.</small></div></li><li><span>▤</span><div class="grow"><strong>Documents de cours de référence</strong><small>Savoir-faire, cours, modèles de rédaction ou documents utiles.</small></div></li></ul>${anonymityControl()}</div>`+
+ `<div class="card"><div class="eyebrow">3. Initialisation de l’IA</div><h2>Première lecture des copies</h2><p class="help">Joignez les documents ci-dessus, puis copiez la consigne ci-dessous dans l’IA. Elle repère immédiatement les copies, leurs versions probables et les erreurs communes ; cette première lecture servira ensuite au corrigé et à la grille.${names?' Le mode anonymat est désactivé : l’IA conserve aussi les noms/prénoms lus sur les copies.':''}</p><h3>Consigne à copier dans l’IA</h3><textarea id="opening" aria-label="Consigne de démarrage pour l’IA" readonly placeholder="Chargement de la consigne…"></textarea><div class="actions"><button class="primary" id="copy-opening" disabled>Copier</button></div><p class="help">Gardez cette même conversation pour toutes les étapes suivantes.</p></div>`+
+ `<div class="card"><div class="eyebrow">4. Résultats de l’initialisation</div><h2>Prétraitement des copies</h2><p class="help">Après la première lecture, demandez à l’IA son JSON de repérage des copies puis collez-le ci-dessous.${names?' Le JSON contient également les noms et prénoms lus sur chaque copie.':''} Aucun PDF n’est importé dans SmartCorrection.</p>`+
+ exchangePanel('pretraitement','Résultat de l’initialisation au format JSON',names?'Le JSON contient les copies, leurs noms/prénoms, leurs pages, leur version probable et les pages ignorées.':'Le JSON contient les copies repérées, leurs pages, leur version probable et les pages ignorées.')+
  (prep?`<div class="notice success">Prétraitement enregistré : ${prep.copies.length} copie(s). Il sera appliqué automatiquement à la validation de la grille.</div>`:'')+
  `</div><div class="notice">Les consignes générales et celles de cette classe sont intégrées automatiquement au texte copié.</div><button id="view-policies">Voir les consignes mémorisées</button>`;
  bindLayout('setup');
+ bindAnonymity();
  loadPrompt('ouverture','#opening','#copy-opening');
  $('#view-policies').onclick=policiesModal;
 };

@@ -122,6 +122,7 @@ def dispatch(app,data):
     if action=='classe': return app.roster(data['classe'],data['texte'],commit,data.get('rapprochements'),data.get('empreinte'))
     if action=='creer': return app.create(data['classe'],data['titre'])
     if action=='upload': return app.upload(ident,data['role'],data['nom'],data['contenu'])
+    if action=='anonymat': return app.save_anonymity(ident,data.get('actif',True))
     if action=='formats':
         if 'layout' in data: return app.save_layout(ident,data['layout'])
         return app.save_formats(ident,data.get('correction','A6'),data.get('corrige','A6'))

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 
 from .db import database
 from .gui_service import response_body
@@ -20,7 +21,37 @@ def _meta_key(ident):
     return f'workflow-pretraitement:{ident}'
 
 
-def _validate_preprocessing(data, dossier):
+def _privacy_key(ident):
+    return f'workflow-anonymat:{ident}'
+
+
+def _anonymity(conn, ident):
+    row = conn.execute('SELECT valeur FROM ui_meta WHERE cle=?', (_privacy_key(ident),)).fetchone()
+    if not row:
+        return True
+    return row[0] != '0'
+
+
+def _save_anonymity(self, ident, enabled=True):
+    if type(enabled) is not bool:
+        raise ValueError('Mode anonymat invalide')
+    with database(self.db_path) as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        self._dossier(conn, ident)
+        if conn.execute('SELECT 1 FROM ui_meta WHERE cle=?', (_meta_key(ident),)).fetchone():
+            raise ValueError('Le mode anonymat ne peut plus être modifié après validation des résultats de l’initialisation.')
+        conn.execute('INSERT INTO ui_meta(cle,valeur) VALUES(?,?) ON CONFLICT(cle) DO UPDATE SET valeur=excluded.valeur',
+                     (_privacy_key(ident), '1' if enabled else '0'))
+    return {'anonymat': enabled}
+
+
+def _clean_name(value, field):
+    if value is None:
+        return None
+    return string(value, field).strip() or None
+
+
+def _validate_preprocessing(data, dossier, anonymous=True):
     keys = {'dossier', 'revision', 'copies', 'pages_ignorees', 'absents'}
     object_fields(data, keys, {'dossier', 'revision', 'copies', 'pages_ignorees'})
     if data['dossier'] != dossier['id'] or type(data['revision']) is not int or data['revision'] != dossier['revision']:
@@ -28,7 +59,9 @@ def _validate_preprocessing(data, dossier):
     refs, pages = set(), set()
     clean_copies = []
     for item in array(data['copies'], 'copies', True):
-        object_fields(item, {'reference', 'numero', 'version', 'pages'}, {'reference', 'numero', 'version', 'pages'})
+        allowed = {'reference', 'numero', 'version', 'pages'} if anonymous else {'reference', 'numero', 'version', 'pages', 'nom', 'prenom'}
+        required = set(allowed)
+        object_fields(item, allowed, required)
         ref = string(item['reference'], 'reference').strip()
         if not re.fullmatch(r'C\d{3,6}', ref) or ref in refs:
             raise ValueError('Référence de copie répétée ou invalide : utiliser C001, C002…')
@@ -45,7 +78,13 @@ def _validate_preprocessing(data, dossier):
             pages.add(page); checked.append(page)
         if checked != sorted(checked):
             raise ValueError('Indiquer les pages dans l’ordre du paquet')
-        clean_copies.append({'reference': ref, 'numero': None, 'version': version, 'pages': checked})
+        clean = {'reference': ref, 'numero': None, 'version': version, 'pages': checked}
+        if not anonymous:
+            clean['nom'] = _clean_name(item.get('nom'), 'nom')
+            clean['prenom'] = _clean_name(item.get('prenom'), 'prenom')
+            if not clean['nom'] and not clean['prenom']:
+                raise ValueError(f'{ref} : fournir le nom/prénom lu sur la copie, ou repasser en mode anonymat')
+        clean_copies.append(clean)
     ignored = []
     for item in array(data['pages_ignorees'], 'pages_ignorees'):
         object_fields(item, {'page', 'motif'}, {'page', 'motif'})
@@ -75,6 +114,7 @@ def _state(self, ident):
     result = _BASE_STATE(self, ident)
     with database(self.db_path) as conn:
         result['pretraitement'] = _read_preprocessing(conn, ident)
+        result['anonymat'] = _anonymity(conn, ident)
     return result
 
 
@@ -97,7 +137,7 @@ def _exchange(self, ident, stage, text, commit=False):
     with database(self.db_path) as conn:
         conn.execute('BEGIN IMMEDIATE')
         dossier = self._dossier(conn, ident)
-        clean = _validate_preprocessing(data, dossier)
+        clean = _validate_preprocessing(data, dossier, _anonymity(conn, ident))
         result = {'copies': len(clean['copies']), 'pages_ignorees': len(clean['pages_ignorees'])}
         if commit:
             conn.execute('INSERT INTO ui_meta(cle,valeur) VALUES(?,?) ON CONFLICT(cle) DO UPDATE SET valeur=excluded.valeur',
@@ -108,6 +148,23 @@ def _exchange(self, ident, stage, text, commit=False):
         return result
 
 
+def _name_key(value):
+    text = unicodedata.normalize('NFKD', value or '')
+    text = ''.join(ch for ch in text if not unicodedata.combining(ch))
+    return re.sub(r'[^a-z0-9]+', '', text.casefold())
+
+
+def _match_student(conn, dossier, item):
+    if 'nom' not in item and 'prenom' not in item:
+        return None
+    target = (_name_key(item.get('nom')), _name_key(item.get('prenom')))
+    if not any(target):
+        return None
+    rows = conn.execute('SELECT id,nom,prenom FROM eleve_par_classe WHERE classe=?', (dossier['classe'],)).fetchall()
+    matches = [r['id'] for r in rows if (_name_key(r['nom']), _name_key(r['prenom'])) == target]
+    return matches[0] if len(matches) == 1 else None
+
+
 def _materialize_preprocessing(conn, dossier, data):
     if not data or conn.execute('SELECT 1 FROM ui_copie WHERE dossier_id=? LIMIT 1', (dossier['id'],)).fetchone():
         return
@@ -115,8 +172,9 @@ def _materialize_preprocessing(conn, dossier, data):
     for item in data['copies']:
         if item['version'] not in versions:
             raise ValueError(f"Version inconnue dans le prétraitement : {item['version']}")
-        cid = conn.execute('INSERT INTO copie(eleve_id,sujet_id,version_id,pdf_path,statut) VALUES(NULL,?,?,?,?)',
-                           (dossier['sujet_id'], versions[item['version']], '', 'present')).lastrowid
+        eleve_id = _match_student(conn, dossier, item)
+        cid = conn.execute('INSERT INTO copie(eleve_id,sujet_id,version_id,pdf_path,statut) VALUES(?,?,?,?,?)',
+                           (eleve_id, dossier['sujet_id'], versions[item['version']], '', 'present')).lastrowid
         conn.execute('INSERT INTO ui_copie(dossier_id,reference,copie_id) VALUES(?,?,?)',
                      (dossier['id'], item['reference'], cid))
         for order, page in enumerate(item['pages'], 1):
@@ -139,3 +197,4 @@ WorkflowApplication.state = _state
 WorkflowApplication.draft = _draft
 WorkflowApplication.exchange = _exchange
 WorkflowApplication._grid = _grid
+WorkflowApplication.save_anonymity = _save_anonymity
