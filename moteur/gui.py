@@ -67,6 +67,10 @@ def make_server(app, port=0):
                     self._send(200,{'texte':text})
                 elif path=='/api/history':
                     self._send(200,app.instruction_history(query.get('classe',[''])[0]))
+                elif path=='/api/layout-preview':
+                    with app.lock:
+                        preview=app.layout_preview(query.get('id',[''])[0])
+                    self._send(200,preview,'application/pdf')
                 elif path=='/api/corrige-preview':
                     with app.lock:
                         preview=app.corrige_preview(query.get('id',[''])[0])
@@ -118,7 +122,9 @@ def dispatch(app,data):
     if action=='classe': return app.roster(data['classe'],data['texte'],commit,data.get('rapprochements'),data.get('empreinte'))
     if action=='creer': return app.create(data['classe'],data['titre'])
     if action=='upload': return app.upload(ident,data['role'],data['nom'],data['contenu'])
-    if action=='formats': return app.save_formats(ident,data.get('correction','A6'),data.get('corrige','A6'))
+    if action=='formats':
+        if 'layout' in data: return app.save_layout(ident,data['layout'])
+        return app.save_formats(ident,data.get('correction','A6'),data.get('corrige','A6'))
     if action=='brouillon': return app.draft(ident,data['etape'],data['texte'])
     if action=='echange': return app.exchange(ident,data['etape'],data['texte'],commit)
     if action=='corrige':
