@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const source = fs.readFileSync(path.join(__dirname, '../moteur/web/workflow-v2.js'), 'utf8');
+const layout = fs.readFileSync(path.join(__dirname, '../moteur/web/layout-v3.js'), 'utf8');
 const index = fs.readFileSync(path.join(__dirname, '../moteur/web/index.html'), 'utf8');
 
 test('workflow exposes the seven requested stages in order', () => {
@@ -18,9 +19,14 @@ test('workflow exposes the seven requested stages in order', () => {
 
 test('format choice defaults to A6 and separates correction from corrige', () => {
   assert.match(source, /\['A6','A5','A4'\]/);
-  assert.match(source, /format-correction/);
-  assert.match(source, /format-corrige/);
-  assert.match(source, /correction:'A6',corrige:'A6'/);
+  assert.match(layout, /Correction — taille/);
+  assert.match(layout, /Corrigé — taille/);
+  assert.match(layout, /Pages dédiées/);
+  assert.match(layout, /Colonnes du corrigé/);
+  assert.match(layout, /Côte à côte/);
+  assert.match(layout, /Format terminal d’impression/);
+  assert.match(layout, /\/api\/layout-preview/);
+  assert.match(layout, /Lorem ipsum/);
 });
 
 test('final step groups document notes and feedback', () => {
@@ -30,7 +36,8 @@ test('final step groups document notes and feedback', () => {
   assert.match(source, /exchangePanel\('retour'/);
 });
 
-test('PR17 preview overlay is loaded after workflow v2', () => {
+test('preview overlays are loaded in dependency order', () => {
   assert.ok(index.indexOf('/app.js') < index.indexOf('/workflow-v2.js'));
   assert.ok(index.indexOf('/workflow-v2.js') < index.indexOf('/grid-preview.js'));
+  assert.ok(index.indexOf('/grid-preview.js') < index.indexOf('/layout-v3.js'));
 });

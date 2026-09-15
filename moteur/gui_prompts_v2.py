@@ -7,11 +7,20 @@ from .workflow_v2 import format_description
 
 
 def _format_line(state):
-    formats = state.get('formats') or {'correction': 'A6', 'corrige': 'A6'}
+    layout = state.get('layout')
+    if layout:
+        c, r = layout['correction'], layout['corrige']
+        join = 'côte à côte' if layout['assembly'] == 'cote-a-cote' else 'feuilles séparées'
+        target = (f"feuille de correction : {c['pages']} page(s) {c['size']} {c['orientation']} ; "
+                  f"corrigé : {r['pages']} page(s) {r['size']} {r['orientation']}, {r['columns']} colonne(s) ; "
+                  f"assemblage {join} ; impression terminale {layout['print_format']}.")
+    else:
+        formats = state.get('formats') or {'correction': 'A6', 'corrige': 'A6'}
+        target = (f"feuille de correction {format_description(formats['correction'])} ; "
+                  f"corrigé {format_description(formats['corrige'])}.")
     return ('FORMAT CIBLE DU DOCUMENT — à respecter dans la quantité de contenu et la rédaction : '
-            f"feuille de correction {format_description(formats['correction'])} ; "
-            f"corrigé {format_description(formats['corrige'])}. "
-            'Ne réduis pas artificiellement la qualité mathématique pour faire tenir le contenu ; signale plutôt si le format paraît trop petit.')
+            + target + ' Ne réduis pas artificiellement la qualité mathématique pour faire tenir le contenu ; '
+            'signale plutôt si le format ou le nombre de pages paraît trop petit.')
 
 
 def _prefix(app, ident):
@@ -64,8 +73,8 @@ Structure de réponse :\n''' + public_json(example)
         old = ('Le parcours sera : discuter de la grille ; préparer le corrigé LaTeX ; repérer les copies et leurs pages ; '
                'corriger un échantillon de cinq copies maximum ; ajuster avec l’enseignant ; corriger le reste ; '
                'réécrire les consignes réutilisables en fin de travail.')
-        new = ('Le parcours sera : choisir le format de la feuille de correction et du corrigé ; préparer tous les corrigés de référence en une seule fois ; '
-               'discuter et valider la grille avec un aperçu du rendu ; prétraiter le paquet ; corriger quelques copies ; corriger le lot ; '
+        new = ('Le parcours sera : choisir la mise en page et valider un gabarit factice ; préparer tous les corrigés de référence en une seule fois ; '
+               'discuter et valider la grille avec un aperçu progressivement rempli ; prétraiter le paquet ; corriger quelques copies ; corriger le lot ; '
                'puis récupérer le document final, le tableau des notes et le retour d’expérience.')
         text = text.replace(old, new)
         return _format_line(state) + '\n\n' + text
