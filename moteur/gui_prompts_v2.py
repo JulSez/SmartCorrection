@@ -84,12 +84,14 @@ Structure de réponse :\n''' + public_json(example)
         old = ('Le parcours sera : discuter de la grille ; préparer le corrigé LaTeX ; repérer les copies et leurs pages ; '
                'corriger un échantillon de cinq copies maximum ; ajuster avec l’enseignant ; corriger le reste ; '
                'réécrire les consignes réutilisables en fin de travail.')
-        new = ('Le parcours sera : choisir la mise en page et valider un gabarit factice ; préparer tous les corrigés de référence en une seule fois ; '
-               'discuter et valider la grille avec un aperçu progressivement rempli ; prétraiter le paquet ; corriger quelques copies ; corriger le lot ; '
-               'puis récupérer le document final, le tableau des notes et le retour d’expérience.')
+        new = ('Le parcours sera : choisir la mise en page et valider un gabarit factice ; commencer dès maintenant le prétraitement du paquet de copies ; '
+               'préparer tous les corrigés de référence en une seule fois ; discuter et valider la grille avec un aperçu progressivement rempli ; '
+               'importer le prétraitement déjà préparé ; corriger quelques copies ; corriger le lot ; puis récupérer le document final, le tableau des notes et le retour d’expérience.')
         text = text.replace(old, new)
         text = text.replace('L’enseignant joint le paquet PDF entier, le sujet, une correction si disponible et les cours ou modèles utiles.',
                             'L’enseignant joint directement à cette conversation IA le paquet PDF entier, le sujet, un corrigé s’il existe et les documents de cours de référence utiles.')
+        text = text.replace('Pour l’instant, vérifie les documents disponibles, repère les versions du sujet et demande seulement les précisions nécessaires.',
+                            'Pour l’instant, vérifie les documents disponibles, repère les versions du sujet et commence aussi le prétraitement du paquet : repère les limites de chaque copie, leurs pages et leur version probable. Garde ce repérage dans la conversation ; l’application demandera plus tard le JSON structuré correspondant. Demande seulement les précisions nécessaires.')
         return _format_line(state) + '\n\n' + text
 
     text = legacy_make_prompt(app, ident, stage, version, mode)
