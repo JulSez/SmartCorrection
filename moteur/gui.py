@@ -125,6 +125,7 @@ def dispatch(app,data):
     if action=='formats':
         if 'layout' in data: return app.save_layout(ident,data['layout'])
         return app.save_formats(ident,data.get('correction','A6'),data.get('corrige','A6'))
+    if action=='anonymat': return app.save_anonymity(ident,data.get('actif',True))
     if action=='brouillon': return app.draft(ident,data['etape'],data['texte'])
     if action=='echange': return app.exchange(ident,data['etape'],data['texte'],commit)
     if action=='corrige':
