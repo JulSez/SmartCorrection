@@ -67,6 +67,50 @@ class Pr20HotfixTests(unittest.TestCase):
         self.assertEqual(len(state['pretraitement']['copies']), 2)
         self.assertEqual(state['fichiers'], [])
 
+    def test_non_anonymous_mode_asks_for_names_and_resolves_roster(self):
+        result = self.app.save_anonymity(self.ident, False)
+        self.assertFalse(result['anonymat'])
+        state = self.app.state(self.ident)
+        self.assertFalse(state['anonymat'])
+        prompt = make_prompt(self.app, self.ident, 'pretraitement')
+        self.assertIn('MODE NON ANONYME ACTIF', prompt)
+        self.assertIn('"nom": "DUPONT"', prompt)
+        self.assertIn('"prenom": "Alice"', prompt)
+        payload = {
+            'dossier': self.ident,
+            'revision': 0,
+            'copies': [{'reference': 'C001', 'numero': None, 'nom': 'Alpha', 'prenom': 'Alice',
+                        'version': 'A', 'pages': [1]}],
+            'pages_ignorees': [],
+            'absents': [],
+        }
+        result = self.app.exchange(self.ident, 'pretraitement', json.dumps(payload), True)
+        self.assertEqual(result['identifiees'], 1)
+        saved = self.app.state(self.ident)['pretraitement']['copies'][0]
+        self.assertEqual(saved['nom'], 'Alpha')
+        self.assertEqual(saved['prenom'], 'Alice')
+        self.assertIsInstance(saved['eleve_id'], int)
+
+    def test_anonymity_mode_change_invalidates_saved_preprocessing(self):
+        payload = {
+            'dossier': self.ident, 'revision': 0,
+            'copies': [{'reference': 'C001', 'numero': None, 'version': 'A', 'pages': [1]}],
+            'pages_ignorees': [], 'absents': [],
+        }
+        self.app.exchange(self.ident, 'pretraitement', json.dumps(payload), True)
+        self.assertIsNotNone(self.app.state(self.ident)['pretraitement'])
+        result = self.app.save_anonymity(self.ident, False)
+        self.assertTrue(result['pretraitement_invalide'])
+        self.assertIsNone(self.app.state(self.ident)['pretraitement'])
+
+    def test_ui_exposes_anonymity_selector(self):
+        root = Path(__file__).resolve().parents[1]
+        source = (root/'moteur'/'web'/'hotfix-pr20.js').read_text(encoding='utf-8')
+        self.assertIn('Anonymat activé (défaut)', source)
+        self.assertIn('Anonymat désactivé — l’IA renvoie les noms', source)
+        gui = (root/'moteur'/'gui.py').read_text(encoding='utf-8')
+        self.assertIn("action=='anonymat'", gui)
+
     def test_corrige_and_grid_prompts_reuse_first_reading(self):
         corrige = make_prompt(self.app, self.ident, 'corriges')
         self.assertIn('première lecture transversale des copies', corrige)
