@@ -27,7 +27,8 @@ class Pr20HotfixTests(unittest.TestCase):
     def test_step_one_has_four_clear_sections(self):
         root = Path(__file__).resolve().parents[1]
         source = (root/'moteur'/'web'/'hotfix-pr20.js').read_text(encoding='utf-8')
-        self.assertIn('1. Format de mise en page', source)
+        layout = (root/'moteur'/'web'/'layout-v3.js').read_text(encoding='utf-8')
+        self.assertIn('1. Format de mise en page', layout)
         self.assertIn('2. Préparation des documents', source)
         self.assertIn('3. Initialisation de l’IA', source)
         self.assertIn('4. Résultats de l’initialisation', source)
