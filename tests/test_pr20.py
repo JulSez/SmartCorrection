@@ -24,6 +24,18 @@ class Pr20HotfixTests(unittest.TestCase):
         self.assertIn('Étape 1/6', source)
         self.assertNotIn('Importer le prétraitement', source)
 
+    def test_step_one_has_four_clear_sections(self):
+        root = Path(__file__).resolve().parents[1]
+        source = (root/'moteur'/'web'/'hotfix-pr20.js').read_text(encoding='utf-8')
+        layout = (root/'moteur'/'web'/'layout-v3.js').read_text(encoding='utf-8')
+        self.assertIn('1. Format de mise en page', layout)
+        self.assertIn('2. Préparation des documents', source)
+        self.assertIn('3. Initialisation de l’IA', source)
+        self.assertIn('4. Résultats de l’initialisation', source)
+        self.assertIn('Première lecture des copies', source)
+        self.assertIn('Consigne à copier dans l’IA', source)
+        self.assertIn('Résultat de l’initialisation au format JSON', source)
+
     def test_hotfix_loads_after_layout_layer_and_is_served(self):
         root = Path(__file__).resolve().parents[1]
         index = (root/'moteur'/'web'/'index.html').read_text(encoding='utf-8')
