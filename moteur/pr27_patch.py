@@ -14,6 +14,7 @@ WorkflowApplication = previous.WorkflowApplication
 _BASE_RENDER_STUDENT = render.render_student
 _BASE_GENERATE = WorkflowApplication.generate
 _BASE_APPLY_SOURCE_LAYOUT = pr18._apply_source_layout
+_BASE_ESCAPE = render.latex_escape_plain_text
 _ACTIVE_LAYOUT = ContextVar('smartcorrection_pr27_layout', default=None)
 
 # New dossiers expose the page-break option. Existing saved layouts inherit it
@@ -25,6 +26,28 @@ def _layout_summary(layout):
     text = pr18._layout_summary_original(layout)
     enabled = layout.get('correction', {}).get('newpage_after_correction', True)
     return text + (' Saut de page après correction : oui.' if enabled else ' Saut de page après correction : non.')
+
+
+def _escape_combining_math(value):
+    """Translate common Unicode math accents instead of printing U+xxxx placeholders."""
+    text = '' if value is None else str(value)
+    marks = {'\u0304': 'overline', '\u0305': 'overline', '\u20d7': 'vec'}
+    out = []
+    plain_start = 0
+    i = 0
+    while i < len(text):
+        if i + 1 < len(text) and text[i + 1] in marks and text[i].isalnum():
+            if plain_start < i:
+                out.append(_BASE_ESCAPE(text[plain_start:i]))
+            command = marks[text[i + 1]]
+            out.append(r'\(' + '\\' + command + '{' + _BASE_ESCAPE(text[i]) + r'}\)')
+            i += 2
+            plain_start = i
+            continue
+        i += 1
+    if plain_start < len(text):
+        out.append(_BASE_ESCAPE(text[plain_start:]))
+    return ''.join(out)
 
 
 def _feedback_lines(student, esc):
@@ -177,6 +200,8 @@ pr18._apply_source_layout = _apply_source_layout
 # PR17 temporarily swaps in compact_corrige_source during final generation. Point
 # that hook at the new renderer so the student-sheet redesign is not bypassed.
 pr17.compact_corrige_source = _render_student
+render.latex_escape_plain_text = _escape_combining_math
+render.tex_escape = _escape_combining_math
 render.render_student = _render_student
 workflow.render_student = _render_student
 WorkflowApplication.generate = _generate
