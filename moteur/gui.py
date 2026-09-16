@@ -54,7 +54,7 @@ def make_server(app, port=0):
                 parsed=urlsplit(self.path);path=parsed.path;query=parse_qs(parsed.query)
                 if path=='/':
                     self._send(200,(WEB/'index.html').read_text(encoding='utf-8').replace('__TOKEN__',token).encode('utf-8'),'text/html; charset=utf-8')
-                elif path in {'/app.js','/grid-preview.js','/workflow-v2.js','/layout-v3.js','/hotfix-pr20.js','/style.css'}:
+                elif path in {'/app.js','/grid-preview.js','/workflow-v2.js','/layout-v3.js','/layout-v4.js','/hotfix-pr20.js','/style.css'}:
                     mime='text/javascript' if path.endswith('.js') else 'text/css'
                     self._send(200,(WEB/path[1:]).read_bytes(),mime+'; charset=utf-8')
                 elif path=='/api/home':
