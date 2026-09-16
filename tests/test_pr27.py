@@ -43,6 +43,15 @@ class Pr27CorrectionLayoutTests(unittest.TestCase):
         self.assertIn('À vérifier par le prof', tex)
         self.assertIn('Version à confirmer', tex)
 
+    def test_combining_math_accents_render_as_latex(self):
+        student = self.student()
+        student['items'][0]['description'] = 'Poser z̄ = x + iy et v⃗ = (1,2)'
+        tex = render.render_student(student, {'titre': 'Interro 1', 'classe': 'TEST'}, config_from_mapping(INDIVIDUAL))
+        self.assertIn(r'\overline{z}', tex)
+        self.assertIn(r'\vec{v}', tex)
+        self.assertNotIn('U+0304', tex)
+        self.assertNotIn('U+20D7', tex)
+
     def test_page_break_option_is_saved(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
