@@ -23,19 +23,19 @@ class Pr27CorrectionLayoutTests(unittest.TestCase):
             ],
             'annotations': [],
             'conseils': [{'texte': 'Soigner les signes.'}],
-            'corrige_latex': r'\\section*{Exercice 1} Corrigé.',
+            'corrige_latex': r'\section*{Exercice 1} Corrigé.',
         }
 
     def test_student_sheet_has_compact_header_and_hierarchical_grid(self):
         tex = render.render_student(self.student(), {'titre': 'Interro 1', 'classe': 'TEST'}, config_from_mapping(INDIVIDUAL))
-        self.assertIn(r'\\textbf{Interro 1}', tex)
-        self.assertIn(r'\\textbf{Alice DUPONT}', tex)
-        self.assertIn(r'\\textbf{Note :}', tex)
-        self.assertIn(r'\\section*{Grille}', tex)
-        self.assertIn(r'\\dotfill', tex)
-        self.assertIn(r'\\noalign{\\hrule height 1.2pt}', tex)
+        self.assertIn(r'\textbf{Interro 1}', tex)
+        self.assertIn(r'\textbf{Alice DUPONT}', tex)
+        self.assertIn(r'\textbf{Note :}', tex)
+        self.assertIn(r'\section*{Grille}', tex)
+        self.assertIn(r'\dotfill', tex)
+        self.assertIn(r'\noalign{\hrule height 1.2pt}', tex)
         self.assertNotIn('À vérifier par le prof', tex)
-        self.assertNotIn(r'\\SCtitle{Corrigé}', tex)
+        self.assertNotIn(r'\SCtitle{Corrigé}', tex)
 
     def test_teacher_check_section_only_when_needed(self):
         student = self.student(); student['a_verifier'] = ['Version à confirmer']
