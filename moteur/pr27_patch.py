@@ -5,6 +5,7 @@ from contextvars import ContextVar
 
 from . import render
 from . import workflow_v2 as workflow
+from . import pr17_patch as pr17
 from . import pr18_patch as pr18
 from . import pr25_patch as previous
 from .db import database
@@ -102,6 +103,20 @@ def _compact_header(student, subject, cfg, esc):
             r'{\color{SCblue}\hrule height .7pt}\vspace{1mm}']
 
 
+def _compact_corrige(source, student, subject, esc):
+    old = '\n'.join([
+        r'\def\SCpanel{Corrigé}\setcounter{page}{1}',
+        r'\SCtitle{Corrigé}',
+        r'{\bfseries ' + esc(subject.get('titre') or 'Évaluation') + r'}\par',
+        r'\textbf{Version :} ' + esc(student.get('version') or '?') + r'\hfill\textbf{Classe :} ' + esc(subject.get('classe') or '') + r'\par\vspace{2mm}',
+    ])
+    new = '\n'.join([
+        r'\def\SCpanel{Corrigé}\setcounter{page}{1}',
+        r'{\bfseries\color{SCblue} Corrigé}\par\vspace{2mm}',
+    ])
+    return source.replace(old, new, 1)
+
+
 def _render_student(student, subject, cfg):
     source = _BASE_RENDER_STUDENT(student, subject, cfg)
     esc = render.latex_escape_plain_text
@@ -109,7 +124,7 @@ def _render_student(student, subject, cfg):
     body_start = source.find(r'\section*{Correction}', start)
     end = source.find(r'\label{sc-correction-end}', body_start)
     if start == -1 or body_start == -1 or end == -1:
-        return source
+        return _compact_corrige(source, student, subject, esc)
 
     head = source[:start]
     body = _compact_header(student, subject, cfg, esc)
@@ -127,6 +142,7 @@ def _render_student(student, subject, cfg):
 
     tail = source[end:]
     rebuilt = head + '\n'.join(body) + '\n' + tail
+    rebuilt = _compact_corrige(rebuilt, student, subject, esc)
     active = _ACTIVE_LAYOUT.get()
     if active is not None:
         rebuilt = _apply_page_break(rebuilt, active)
@@ -158,6 +174,9 @@ if not hasattr(pr18, '_layout_summary_original'):
     pr18._layout_summary_original = pr18._layout_summary
 pr18._layout_summary = _layout_summary
 pr18._apply_source_layout = _apply_source_layout
+# PR17 temporarily swaps in compact_corrige_source during final generation. Point
+# that hook at the new renderer so the student-sheet redesign is not bypassed.
+pr17.compact_corrige_source = _render_student
 render.render_student = _render_student
 workflow.render_student = _render_student
 WorkflowApplication.generate = _generate
