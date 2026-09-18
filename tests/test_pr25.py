@@ -71,10 +71,29 @@ class FlexibleCopyIdentityTests(unittest.TestCase):
         self.assertEqual(copy.get('nom'), 'Alpha')
         self.assertEqual(copy.get('prenom'), 'Alice')
 
+    def test_identity_read_accepts_number_or_name_and_can_be_adjusted(self):
+        payload = self._payload()
+        payload['copies'][0]['identite_lue'] = 'n° 1'
+        payload['copies'][1]['identite_lue'] = 'Bob Beta'
+        self.app.exchange(self.ident, 'pretraitement', json.dumps(payload), True)
+        state = self.app.state(self.ident)
+        copies = {c['reference']: c for c in state['pretraitement']['copies']}
+        students = {s['numero']: s for s in state['eleves']}
+        self.assertEqual(copies['C001']['identite_lue'], 'n° 1')
+        self.assertEqual(copies['C001']['eleve_id'], students[1]['id'])
+        self.assertEqual(copies['C002']['eleve_id'], students[2]['id'])
+        self.app.review(self.ident, '@affectation:C001:')
+        state = self.app.state(self.ident)
+        copy = next(c for c in state['pretraitement']['copies'] if c['reference'] == 'C001')
+        self.assertIsNone(copy.get('eleve_id'))
+        self.assertEqual(copy['identite_lue'], 'n° 1')
+
     def test_ui_exposes_manual_assignment_and_unassigned_choice(self):
         root = Path(__file__).resolve().parents[1]
         source = (root/'moteur'/'web'/'hotfix-pr20.js').read_text(encoding='utf-8')
         self.assertIn('Affectation locale des élèves', source)
+        self.assertIn('Identité lue par l’IA', source)
+        self.assertIn('c.identite_lue', source)
         self.assertIn('N° ou nom de l’élève', source)
         self.assertIn('normalizeStudentSearch', source)
         self.assertIn('part.startsWith(q)', source)

@@ -21,7 +21,7 @@ def _validate_preprocessing(data, dossier, anonymous=True):
     refs, pages = set(), set()
     clean_copies = []
     for item in array(data['copies'], 'copies', True):
-        allowed = {'reference', 'numero', 'version', 'pages'} if anonymous else {'reference', 'numero', 'version', 'pages', 'nom', 'prenom'}
+        allowed = {'reference', 'numero', 'version', 'pages', 'identite_lue'} if anonymous else {'reference', 'numero', 'version', 'pages', 'identite_lue', 'nom', 'prenom'}
         required = {'reference', 'numero', 'version', 'pages'}
         object_fields(item, allowed, required)
         ref = string(item['reference'], 'reference').strip()
@@ -40,6 +40,8 @@ def _validate_preprocessing(data, dossier, anonymous=True):
         if checked != sorted(checked):
             raise ValueError('Indiquer les pages dans l’ordre du paquet')
         clean = {'reference': ref, 'numero': None, 'version': version, 'pages': checked}
+        identity = item.get('identite_lue')
+        clean['identite_lue'] = None if identity is None else string(identity, 'identite_lue').strip() or None
         if not anonymous:
             clean['nom'] = previous._clean_name(item.get('nom'), 'nom')
             clean['prenom'] = previous._clean_name(item.get('prenom'), 'prenom')
@@ -59,6 +61,31 @@ def _validate_preprocessing(data, dossier, anonymous=True):
             'pages_ignorees': ignored, 'absents': []}
 
 
+def _match_read_identity(conn, dossier, item):
+    raw = (item.get('identite_lue') or '').strip()
+    if not raw:
+        return None
+    number_match = re.fullmatch(r'(?:n(?:°|º|o)?\s*)?(\d+)', raw, re.IGNORECASE)
+    if number_match:
+        row = conn.execute('SELECT id FROM eleve_par_classe WHERE classe=? AND numero=?',
+                           (dossier['classe'], int(number_match.group(1)))).fetchone()
+        return row['id'] if row else None
+    target = previous._name_key(raw)
+    if not target:
+        return None
+    rows = conn.execute('SELECT id,nom,prenom FROM eleve_par_classe WHERE classe=?', (dossier['classe'],)).fetchall()
+    matches = []
+    for row in rows:
+        candidates = [
+            row['nom'] or '', row['prenom'] or '',
+            ' '.join(x for x in (row['prenom'], row['nom']) if x),
+            ' '.join(x for x in (row['nom'], row['prenom']) if x),
+        ]
+        if target in {previous._name_key(value) for value in candidates if value}:
+            matches.append(row['id'])
+    return matches[0] if len(matches) == 1 else None
+
+
 def _match_student(conn, dossier, item):
     if item.get('affectation_bloquee'):
         return None
@@ -66,7 +93,8 @@ def _match_student(conn, dossier, item):
     if manual is not None:
         row = conn.execute('SELECT id FROM eleve_par_classe WHERE classe=? AND id=?', (dossier['classe'], manual)).fetchone()
         return row['id'] if row else None
-    return previous._match_student_original(conn, dossier, item)
+    guessed = _match_read_identity(conn, dossier, item)
+    return guessed if guessed is not None else previous._match_student_original(conn, dossier, item)
 
 
 def _state(self, ident):
@@ -81,7 +109,7 @@ def _state(self, ident):
         if prep:
             for item in prep.get('copies', []):
                 if item.get('eleve_id') is None and not item.get('affectation_bloquee'):
-                    guessed = previous._match_student_original(conn, dossier, item)
+                    guessed = _match_student(conn, dossier, item)
                     if guessed is not None:
                         item['eleve_id'] = guessed
     return result
