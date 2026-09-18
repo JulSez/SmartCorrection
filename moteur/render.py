@@ -46,33 +46,52 @@ _UNICODE_TEXT.update({c: r'\(_{'+n+r'}\)' for c, n in zip('₀₁₂₃₄₅₆
 
 
 def latex_escape_plain_text(value):
-    """Escape untrusted prose, then emit pdflatex-safe Unicode equivalents.
+    """Escape untrusted prose and emit pdflatex-safe Unicode equivalents.
 
-    Never call this on an explicitly authored LaTeX fragment. The original text
-    stays in SQLite/JSON; an unknown glyph is printed as its Unicode code point.
+    Combining macrons/vector arrows used in mathematical prose are converted to
+    LaTeX commands instead of falling back to U+xxxx placeholders.
     """
-    replacements = {'\\': r'\textbackslash{}', '&': r'\&', '%': r'\%', '$': r'\$',
-                    '#': r'\#', '_': r'\_', '{': r'\{', '}': r'\}', '~': r'\textasciitilde{}',
-                    '^': r'\textasciicircum{}', '\n': r'\newline{}'}
+    replacements = {'\\\\': r'\\textbackslash{}', '&': r'\\&', '%': r'\\%', '$': r'\\$',
+                    '#': r'\\#', '_': r'\\_', '{': r'\\{', '}': r'\\}', '~': r'\\textasciitilde{}',
+                    '^': r'\\textasciicircum{}', '\\n': r'\\newline{}'}
     text = unicodedata.normalize('NFC', '' if value is None else str(value))
-    text = text.replace('\r\n', '\n').replace('\r', '\n')
-    escaped = ''.join(replacements.get(c, c) for c in text)
-    result = []
-    for char in escaped:
-        if char in _MATH_SYMBOLS:
-            result.append(r'\('+_MATH_SYMBOLS[char]+r'\)')
-        elif char in _UNICODE_TEXT:
-            result.append(_UNICODE_TEXT[char])
-        elif ord(char) < 128:
-            result.append(char if char.isprintable() else ' ')
-        elif (0xC0 <= ord(char) <= 0xFF and unicodedata.category(char).startswith('L')) or char in 'œŒŸ':
-            result.append(char)
-        elif 0x1D400 <= ord(char) <= 0x1D7FF and unicodedata.normalize('NFKC', char).isascii():
-            result.append(unicodedata.normalize('NFKC', char))
-        else:
-            result.append(r'\texttt{[U+'+format(ord(char), '04X')+']}')
-    return ''.join(result)
+    text = text.replace('\\r\\n', '\\n').replace('\\r', '\\n')
 
+    def escape_segment(segment):
+        escaped = ''.join(replacements.get(ch, ch) for ch in segment)
+        result = []
+        for char in escaped:
+            if char in _MATH_SYMBOLS:
+                result.append(r'\\('+_MATH_SYMBOLS[char]+r'\\)')
+            elif char in _UNICODE_TEXT:
+                result.append(_UNICODE_TEXT[char])
+            elif ord(char) < 128:
+                result.append(char if char.isprintable() else ' ')
+            elif (0xC0 <= ord(char) <= 0xFF and unicodedata.category(char).startswith('L')) or char in 'œŒŸ':
+                result.append(char)
+            elif 0x1D400 <= ord(char) <= 0x1D7FF and unicodedata.normalize('NFKC', char).isascii():
+                result.append(unicodedata.normalize('NFKC', char))
+            else:
+                result.append(r'\\texttt{[U+'+format(ord(char), '04X')+']}')
+        return ''.join(result)
+
+    marks = {'\u0304': 'overline', '\u0305': 'overline', '\u20d7': 'vec'}
+    result, plain = [], []
+    i = 0
+    while i < len(text):
+        if i + 1 < len(text) and text[i + 1] in marks and text[i].isalnum():
+            if plain:
+                result.append(escape_segment(''.join(plain)))
+                plain = []
+            command = marks[text[i + 1]]
+            result.append(r'\\(' + '\\\\' + command + '{' + escape_segment(text[i]) + r'}\\)')
+            i += 2
+            continue
+        plain.append(text[i])
+        i += 1
+    if plain:
+        result.append(escape_segment(''.join(plain)))
+    return ''.join(result)
 
 def tex_escape(value):
     """Compatibility name for the shared plain-text conversion."""
@@ -89,6 +108,7 @@ def build_student_data(conn, result, row):
     data['annotations'] = []
     data['conseils'] = []
     data['commentaire_global'] = None
+    data['a_verifier'] = []
     data['corrige_latex'] = None
     if row['version_id'] is not None:
         corrige = conn.execute('SELECT str_latex FROM corrige WHERE version_id=?', (row['version_id'],)).fetchone()
@@ -97,6 +117,7 @@ def build_student_data(conn, result, row):
     if row['correction_id'] is not None:
         cid = row['correction_id']
         data['commentaire_global'] = conn.execute('SELECT commentaire_global FROM correction WHERE id=?', (cid,)).fetchone()[0]
+        data['a_verifier'] = [r['texte'] for r in conn.execute('SELECT texte FROM ui_verification WHERE copie_id=? ORDER BY ordre', (row['copie_id'],))]
         data['items'] = [dict(r) for r in conn.execute('''SELECT i.code,i.description,i.bareme_max,
             e.numero exercice,q.numero question,ci.points_obtenus,ci.statut,ci.commentaire,ci.annotation
             FROM correction_item ci JOIN item i ON i.id=ci.item_id JOIN question q ON q.id=i.question_id
@@ -110,93 +131,108 @@ def build_student_data(conn, result, row):
 
 
 def render_student(student, subject, cfg):
-    """Typeset independent A6 streams; compile_pdf pairs them onto A5 sheets."""
+    """Render the pupil correction stream followed by the reference correction."""
     esc = latex_escape_plain_text
     individual_only = cfg.groupe_mode == 'aucun' or cfg.note_groupe_max == 0
-    label = student.get('label') or ('n° '+str(student['numero']))
+    label = student.get('label') or ('n° '+str(student.get('numero') or '?'))
     if label.startswith('Élève n° '):
         label = label.removeprefix('Élève ')
-    lines = ['% SmartCorrection: paired-a6-v1',
-             r'\documentclass[10pt]{article}', r'\usepackage[utf8]{inputenc}',
-             r'\usepackage[T1]{fontenc}', r'\usepackage{lmodern,textcomp}', r'\IfFileExists{french.ldf}{\usepackage[french]{babel}}{}', r'\usepackage{amsmath,amssymb,longtable,array}',
-             r'\usepackage{xcolor}',
-             r'\usepackage[paperwidth=105mm,paperheight=148mm,margin=6mm,bottom=9mm,footskip=4mm]{geometry}',
-             r'\definecolor{SCblue}{HTML}{245A81}',
-             r'\setlength{\parindent}{0pt}\setlength{\parskip}{3pt}',
-             r'\setlength{\tabcolsep}{2.5pt}\setlength{\emergencystretch}{1em}',
-             r'\renewcommand{\normalsize}{\fontsize{8.5}{10.5}\selectfont}',
-             r'\renewcommand{\small}{\fontsize{7.5}{9}\selectfont}',
-             r'\makeatletter',
-             r'\renewcommand{\section}{\@startsection{section}{1}{0pt}{6pt}{3pt}{\color{SCblue}\bfseries\normalsize}}',
-             r'\renewcommand{\subsection}{\@startsection{subsection}{2}{0pt}{5pt}{2pt}{\color{SCblue}\bfseries\normalsize}}',
-             r'\def\SCpanel{Correction}',
-             r'\def\@oddfoot{\hfil{\small\color{SCblue}\SCpanel\enspace\textbullet\enspace\thepage}\hfil}',
-             r'\let\@evenfoot\@oddfoot\def\@oddhead{}\def\@evenhead{}',
-             r'\makeatother',
-             r'\newcommand{\SCtitle}[1]{{\fontsize{15}{17}\selectfont\bfseries\color{SCblue}\strut#1}\par\vspace{1mm}{\color{SCblue}\hrule height .7pt}\vspace{2mm}}',
-             r'\begin{document}\normalsize',
-             r'\setlength{\abovedisplayskip}{4pt}\setlength{\belowdisplayskip}{4pt}\allowdisplaybreaks',
-             r'\SCtitle{Correction}',
-             r'{\bfseries '+esc(subject.get('titre') or 'Évaluation')+r'}\par',
-             r'\textbf{Version :} '+esc(student['version'] or '?')+r'\hfill\textbf{Classe :} '+esc(subject['classe'])+r'\par',
-             r'\textbf{Élève :} '+esc(label)+r'\par\vspace{2mm}',
-             r'\renewcommand{\arraystretch}{1.4}',
-             r'\begin{tabular}{|p{.55\linewidth}|>{\centering\arraybackslash}p{\dimexpr.45\linewidth-4\tabcolsep-3\arrayrulewidth\relax}|}\hline',
-             r'\textcolor{SCblue}{\textbf{'+f'Note (/{fmt(cfg.note_finale_max)})'+r'}} & \textcolor{SCblue}{\textbf{'+fmt(student['note_finale'])+r'}}\\\hline',
-             r'\end{tabular}\par']
-    if not individual_only:
-        lines = lines[:-3]
-        score = lambda value: fmt(round(value, 2)) if value is not None else fmt(None)
-        peers = r'\newline '.join(esc(f"n° {p['numero']} : " + (
-            'absent' if p['statut']=='absent' else
-            f"{score(p['note_individuelle'])}/{fmt(cfg.note_individuelle_max)}" if p['note_individuelle'] is not None else 'en attente'))
-            for p in student['camarades']) or esc('Aucun camarade')
-        pending = student.get('etat_groupe')
-        group_note = esc('En attente' if pending and pending.startswith('En attente') else 'À traiter') if pending else score(student['note_groupe'])
-        final_note = '--' if pending else fmt(student['note_finale'])
-        col = r'>{\centering\arraybackslash}p{\dimexpr.333333\linewidth-2\tabcolsep-1.333333\arrayrulewidth\relax}'
-        lines += [r'\begin{tabular}{|'+col+'|'+col+'|'+col+r'|}\hline',
-                  r'\textcolor{SCblue}{\textbf{Individuelle /'+fmt(cfg.note_individuelle_max)+
-                  r'}} & \textcolor{SCblue}{\textbf{Groupe /'+fmt(cfg.note_groupe_max)+r'}} & \textcolor{SCblue}{\textbf{Finale /'+fmt(cfg.note_finale_max)+r'}}\\\hline',
-                  score(student['note_individuelle'])+' & '+group_note+r'\newline {\scriptsize '+peers+
-                  r'} & \textcolor{SCblue}{\textbf{'+final_note+r'}}\\\hline',
-                  r'\end{tabular}\par']
-        if pending:
-            lines += [r'{\small '+esc(pending)+r'\par}']
-    if student['statut'] == 'absent':
-        lines += [r'\par\textbf{Absence déclarée.}']
-    else:
-        lines += [r'\section*{Correction}', r'\renewcommand{\arraystretch}{1.18}',
-                  r'\setlength{\LTpre}{0pt}\setlength{\LTpost}{3pt}',
-                  r'\begin{longtable}{@{}>{\raggedright\arraybackslash}p{.14\linewidth}>{\raggedright\arraybackslash}p{.34\linewidth}>{\centering\arraybackslash}p{.13\linewidth}>{\raggedright\arraybackslash}p{\dimexpr.39\linewidth-6\tabcolsep\relax}@{}}',
-                  r'\small\textcolor{SCblue}{\textbf{Question}} & \small\textcolor{SCblue}{\textbf{Description du critère}} & \small\textcolor{SCblue}{\textbf{Note}} & \small\textcolor{SCblue}{\textbf{Retour}}\\\hline\endhead']
-        for item in student['items']:
-            question = esc('Ex. '+str(item.get('exercice', '?')))+r'\newline '+esc('Q. '+str(item.get('question', '?')))
-            feedback = [esc(item[key]) for key in ('commentaire', 'annotation') if item.get(key)]
-            lines.append(question+' & '+esc(item['description'])+' & '+fmt(item['points_obtenus'])+'/'+fmt(item['bareme_max'])+' & '+r'\newline '.join(feedback)+r'\\\hline')
-        lines += [r'\end{longtable}']
-        if student['commentaire_global']:
-            lines += [esc(student['commentaire_global'])]
-    if student['annotations']:
-        lines += [r'\section*{Annotations de la copie}', r'\begin{itemize}']
-        for a in student['annotations']:
-            lines += [r'\item '+esc(f"Page {a['page']} - {a['item_code']} : {a['texte']}")]
-        lines += [r'\end{itemize}']
-    lines += [r'\section*{Conseils}']
-    if student['conseils']:
-        lines += [r'\begin{itemize}\setlength{\itemsep}{1pt}\setlength{\parskip}{0pt}']
-        lines += [r'\item '+esc(a['texte']) for a in student['conseils']]
-        lines += [r'\end{itemize}']
-    else:
-        lines += ['Aucun conseil enregistré.']
-    lines += [r'\label{sc-correction-end}\clearpage',
-              r'\def\SCpanel{Corrigé}\setcounter{page}{1}', r'\SCtitle{Corrigé}',
-              r'{\bfseries '+esc(subject.get('titre') or 'Évaluation')+r'}\par',
-              r'\textbf{Version :} '+esc(student['version'] or '?')+r'\hfill\textbf{Classe :} '+esc(subject['classe'])+r'\par\vspace{2mm}',
-              student['corrige_latex'] or 'Aucun corrigé enregistré pour cette version.']
-    lines += [r'\end{document}', '']
-    return '\n'.join(lines)
+    if student.get('nom') or student.get('prenom'):
+        label = ' '.join(x for x in (student.get('prenom'), student.get('nom')) if x)
 
+    lines = ['% SmartCorrection: paired-a6-v1',
+             r'\\documentclass[10pt]{article}', r'\\usepackage[utf8]{inputenc}',
+             r'\\usepackage[T1]{fontenc}', r'\\usepackage{lmodern,textcomp}', r'\\IfFileExists{french.ldf}{\\usepackage[french]{babel}}{}', r'\\usepackage{amsmath,amssymb,longtable,array}',
+             r'\\usepackage{xcolor}',
+             r'\\usepackage[paperwidth=105mm,paperheight=148mm,margin=6mm,bottom=9mm,footskip=4mm]{geometry}',
+             r'\\definecolor{SCblue}{HTML}{245A81}',
+             r'\\setlength{\\parindent}{0pt}\\setlength{\\parskip}{3pt}',
+             r'\\setlength{\\tabcolsep}{2.5pt}\\setlength{\\emergencystretch}{1em}',
+             r'\\renewcommand{\\normalsize}{\\fontsize{8.5}{10.5}\\selectfont}',
+             r'\\renewcommand{\\small}{\\fontsize{7.5}{9}\\selectfont}',
+             r'\\makeatletter',
+             r'\\renewcommand{\\section}{\\@startsection{section}{1}{0pt}{6pt}{3pt}{\\color{SCblue}\\bfseries\\normalsize}}',
+             r'\\renewcommand{\\subsection}{\\@startsection{subsection}{2}{0pt}{5pt}{2pt}{\\color{SCblue}\\bfseries\\normalsize}}',
+             r'\\def\\SCpanel{Correction}',
+             r'\\def\\@oddfoot{\\hfil{\\small\\color{SCblue}\\SCpanel\\enspace\\textbullet\\enspace\\thepage}\\hfil}',
+             r'\\let\\@evenfoot\\@oddfoot\\def\\@oddhead{}\\def\\@evenhead{}',
+             r'\\makeatother',
+             r'\\newcommand{\\SCtitle}[1]{{\\fontsize{15}{17}\\selectfont\\bfseries\\color{SCblue}\\strut#1}\\par\\vspace{1mm}{\\color{SCblue}\\hrule height .7pt}\\vspace{2mm}}',
+             r'\\begin{document}\\normalsize',
+             r'\\setlength{\\abovedisplayskip}{4pt}\\setlength{\\belowdisplayskip}{4pt}\\allowdisplaybreaks']
+
+    title = esc(subject.get('titre') or 'Évaluation')
+    lines += [
+        r'\\begin{tabular}{@{}p{.34\\linewidth}p{.39\\linewidth}p{.23\\linewidth}@{}}',
+        r'\\textbf{' + title + '} & ' + r'\\textbf{' + esc(label) + '} & ' + r'\\textbf{' + esc(subject.get('classe') or '') + r'}\\\\',
+        r'\\end{tabular}\\par',
+        r'\\textbf{Note :} ' + ('--' if student.get('note_finale') is None else fmt(student['note_finale'])) + '/' + fmt(cfg.note_finale_max) + r'\\par',
+    ]
+    if not individual_only:
+        def score(value):
+            return '--' if value is None else fmt(round(value, 2))
+        lines += [r'{\\scriptsize Individuelle : ' + score(student.get('note_individuelle')) + '/' + fmt(cfg.note_individuelle_max)
+                  + r' \\textbullet{} Groupe : ' + score(student.get('note_groupe')) + '/' + fmt(cfg.note_groupe_max) + r'}\\par']
+    lines += [r'{\\color{SCblue}\\hrule height .7pt}\\vspace{1mm}', r'\\section*{Correction}']
+
+    if student.get('statut') == 'absent':
+        lines += [r'\\textbf{Absence déclarée.}']
+    else:
+        if student.get('commentaire_global'):
+            lines += [esc(student['commentaire_global'])]
+        feedback = []
+        for item in student.get('items', []):
+            texts = [item.get('commentaire'), item.get('annotation')]
+            texts = [x for x in texts if x]
+            if texts:
+                feedback.append(r'\\item \\textbf{' + esc('Ex. '+str(item.get('exercice','?'))+' — Q. '+str(item.get('question','?'))) + '} — ' + esc(' '.join(texts)))
+        for annotation in student.get('annotations', []):
+            if annotation.get('texte'):
+                page = annotation.get('page')
+                prefix = ('Page '+str(page)+' — ') if page is not None else ''
+                feedback.append(r'\\item ' + esc(prefix + annotation['texte']))
+        if feedback:
+            lines += [r'\\begin{itemize}\\setlength{\\itemsep}{1pt}\\setlength{\\parskip}{0pt}'] + feedback + [r'\\end{itemize}']
+
+        lines += [r'% SC:after-correction', r'\\section*{Conseils}']
+        if student.get('conseils'):
+            advice = [r'\\item '+esc(a['texte']) for a in student['conseils'] if a.get('texte')]
+            if advice:
+                lines += [r'\\begin{itemize}\\setlength{\\itemsep}{1pt}\\setlength{\\parskip}{0pt}'] + advice + [r'\\end{itemize}']
+
+        lines += [r'\\section*{Grille}',
+                  r'\\renewcommand{\\arraystretch}{1.14}',
+                  r'\\setlength{\\LTpre}{0pt}\\setlength{\\LTpost}{3pt}',
+                  r'\\begin{longtable}{@{}>{\\raggedright\\arraybackslash}p{.20\\linewidth}>{\\raggedright\\arraybackslash}p{.58\\linewidth}>{\\centering\\arraybackslash}p{.18\\linewidth}@{}}',
+                  r'\\small\\textcolor{SCblue}{\\textbf{Question}} & \\small\\textcolor{SCblue}{\\textbf{Critère}} & \\small\\textcolor{SCblue}{\\textbf{Note}}\\\\\\noalign{\\hrule height .8pt}\\endhead']
+        previous_ex = previous_q = None
+        for index, item in enumerate(student.get('items', [])):
+            ex, q = str(item.get('exercice','?')), str(item.get('question','?'))
+            if index:
+                if ex != previous_ex:
+                    lines.append(r'\\noalign{\\hrule height 1.2pt}')
+                elif q != previous_q:
+                    lines.append(r'\\hline')
+                else:
+                    lines.append(r'\\multicolumn{3}{@{}l@{}}{\\makebox[\\linewidth]{\\color{black!32}\\dotfill}}\\\\[-4pt]')
+            question = esc('Ex. '+ex) + r'\\newline ' + esc('Q. '+q)
+            lines.append(question+' & '+esc(item.get('description') or '')+' & '+fmt(item.get('points_obtenus'))+'/'+fmt(item.get('bareme_max'))+r'\\\\')
+            previous_ex, previous_q = ex, q
+        lines += [r'\\hline', r'\\end{longtable}']
+
+        checks = [str(x).strip() for x in student.get('a_verifier', []) if str(x).strip()]
+        if checks:
+            lines += [r'\\section*{À vérifier par le prof}',
+                      r'\\begin{itemize}\\setlength{\\itemsep}{1pt}\\setlength{\\parskip}{0pt}']
+            lines += [r'\\item '+esc(x) for x in checks]
+            lines += [r'\\end{itemize}']
+
+    lines += [r'\\label{sc-correction-end}\\clearpage',
+              r'\\def\\SCpanel{Corrigé}\\setcounter{page}{1}',
+              r'{\\bfseries\\color{SCblue} Corrigé}\\par\\vspace{2mm}',
+              student.get('corrige_latex') or 'Aucun corrigé enregistré pour cette version.',
+              r'\\end{document}', '']
+    return '\\n'.join(lines)
 
 def _sort_text(value):
     text = unicodedata.normalize('NFKD', str(value or '')).casefold()
@@ -267,11 +303,11 @@ def compile_pdf(tex_path, timeout=60):
     for _ in range(2):
         try:
             run = subprocess.run([engine, '-no-shell-escape', '-interaction=nonstopmode', '-halt-on-error', '-jobname='+jobname, tex_path.name],
-                                 cwd=tex_path.parent, env=env, capture_output=True, text=True, timeout=timeout)
+                                 cwd=tex_path.parent, env=env, capture_output=True, text=False, timeout=timeout)
         except subprocess.TimeoutExpired as exc:
             raise RuntimeError(f'Compilation trop longue : {tex_path.name}') from exc
         if run.returncode:
-            raise RuntimeError(f'Compilation échouée : {tex_path.name}\n{run.stdout[-2500:]}')
+            output = (run.stdout or b'').decode('utf-8', errors='replace')\n            raise RuntimeError(f'Compilation échouée : {tex_path.name}\\n{output[-2500:]}')
     compiled = tex_path.parent/(jobname+'.pdf')
     if not compiled.is_file():
         raise RuntimeError('Aucun PDF produit')
