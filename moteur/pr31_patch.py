@@ -205,6 +205,13 @@ Quand l'enseignant valide le barème dans la conversation, rends alors uniquemen
 
 def _calibration_prompt(app, ident):
     prefix, state = prompts._prefix(app, ident)
+    # During preprocessing, identity is read only to help the teacher map the copy
+    # to the local roster. It is never used as a grading signal.
+    prefix = prefix.replace(
+        prompts._privacy_line(state),
+        "IDENTITÉ POUR RAPPROCHEMENT LOCAL : lis uniquement l’identité visible sur chaque copie "
+        "(numéro ou nom/prénom) dans identite_lue. Ne l’utilise jamais pour la correction.\n"
+    )
     d = state["dossier"]
     copies = state.get("copies") or []
     selected = [c["reference"] for c in copies if c.get("echantillon")]
