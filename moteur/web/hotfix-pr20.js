@@ -44,12 +44,12 @@ function assignmentPanel(prep){
  const students=state.eleves||[];
  const byId=new Map(students.map(s=>[Number(s.id),s]));
  const rows=prep.copies.map(c=>{
-  const read=[c.prenom,c.nom].filter(Boolean).join(' ')||'Non reconnu par l’IA';
+  const read=c.identite_lue||[c.prenom,c.nom].filter(Boolean).join(' ')||'Non reconnu par l’IA';
   const current=c.eleve_id==null?null:byId.get(Number(c.eleve_id));
   const currentText=current?studentLabel(current):'Non attribuée';
   return `<tr><td><strong>${esc(c.reference)}</strong><br><small>p. ${c.pages.join(', ')} · version ${esc(c.version)}</small></td><td>${esc(read)}</td><td><div class="student-search" data-reference="${esc(c.reference)}"><div class="student-current"><strong>${esc(currentText)}</strong>${current?'<button type="button" class="clear-student" title="Retirer l’affectation">×</button>':''}</div><input class="copy-student-search" type="search" autocomplete="off" placeholder="N° ou nom de l’élève…" aria-label="Rechercher un élève pour ${esc(c.reference)}"><div class="student-suggestions" hidden></div></div></td></tr>`;
  }).join('');
- return `<div class="card"><h3>Affectation locale des élèves</h3><p class="help">Une copie peut rester sans élève. Recherchez par numéro, nom ou prénom : par exemple <strong>Moh</strong> propose les élèves dont le nom ou le prénom commence par « Moh ». Cette liste reste locale et n’est pas envoyée à l’IA.</p><div class="table-wrap"><table><thead><tr><th>Copie</th><th>Nom lu par l’IA</th><th>Élève</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+ return `<div class="card"><h3>Affectation locale des élèves</h3><p class="help">Une copie peut rester sans élève. Recherchez par numéro, nom ou prénom : par exemple <strong>Moh</strong> propose les élèves dont le nom ou le prénom commence par « Moh ». Cette liste reste locale et n’est pas envoyée à l’IA.</p><div class="table-wrap"><table><thead><tr><th>Copie</th><th>Identité lue par l’IA</th><th>Élève</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 function bindAssignments(){
  const students=state.eleves||[];
