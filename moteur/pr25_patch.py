@@ -60,6 +60,8 @@ def _validate_preprocessing(data, dossier, anonymous=True):
 
 
 def _match_student(conn, dossier, item):
+    if item.get('affectation_bloquee'):
+        return None
     manual = item.get('eleve_id')
     if manual is not None:
         row = conn.execute('SELECT id FROM eleve_par_classe WHERE classe=? AND id=?', (dossier['classe'], manual)).fetchone()
@@ -78,7 +80,7 @@ def _state(self, ident):
         prep = result.get('pretraitement')
         if prep:
             for item in prep.get('copies', []):
-                if item.get('eleve_id') is None:
+                if item.get('eleve_id') is None and not item.get('affectation_bloquee'):
                     guessed = previous._match_student_original(conn, dossier, item)
                     if guessed is not None:
                         item['eleve_id'] = guessed
@@ -106,11 +108,11 @@ def _assign_student(self, ident, reference, eleve_id=None):
                 if other is not target and other.get('eleve_id') == eleve_id:
                     raise ValueError('Cet élève est déjà affecté à une autre copie')
             target['eleve_id'] = eleve_id
+            target.pop('affectation_bloquee', None)
             target['nom'] = student['nom']; target['prenom'] = student['prenom']
         else:
             target.pop('eleve_id', None)
-            if not previous._anonymity(conn, ident):
-                target['nom'] = None; target['prenom'] = None
+            target['affectation_bloquee'] = True
         conn.execute('UPDATE ui_meta SET valeur=? WHERE cle=?',
                      (json.dumps(prep, ensure_ascii=False), previous._meta_key(ident)))
         linked = conn.execute('''SELECT c.id FROM ui_copie u JOIN copie c ON c.id=u.copie_id
