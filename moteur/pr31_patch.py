@@ -333,6 +333,54 @@ Pour ce PREMIER lot seulement, le même JSON doit aussi contenir le prétraiteme
 """ + _preprocessing_json_contract() + _corriges_json_contract()) if first else """
 Le prétraitement et les corrigés sont déjà enregistrés : ne les répète pas sauf si l'enseignant t'a explicitement demandé de les corriger.
 """
+    example_ref = selected[0] if selected else "C001"
+    example = {
+        "dossier": ident,
+        "revision": d["revision"],
+        "corrections": [{
+            "reference": example_ref,
+            "items": [{
+                "item_code": "E1Q1I1",
+                "points_obtenus": 1,
+                "statut": "partiel",
+                "commentaire": "Erreur de signe.",
+                "annotation": None,
+            }],
+            "annotations": [{
+                "item_code": "E1Q1I1",
+                "page": 1,
+                "texte": "Erreur ici.",
+                "x": None, "y": None, "largeur": None, "hauteur": None,
+                "type_annotation": None,
+            }],
+            "conseils": [{
+                "texte": "Vérifier les signes.",
+                "item_code": "E1Q1I1",
+                "priorite": 1,
+            }],
+            "commentaire_global": "Calcul à sécuriser.",
+            "a_verifier": [],
+        }],
+        "a_revoir": [],
+        "moyenne_estimee": 12.5,
+    }
+    if first:
+        example["pretraitement"] = {
+            "copies": [{
+                "reference": "C001",
+                "identite_lue": "17",
+                "numero": None,
+                "version": "A",
+                "pages": [1, 2],
+            }],
+            "pages_ignorees": [{"page": 3, "motif": "page blanche"}],
+            "absents": [],
+        }
+        example["corriges"] = [{
+            "version": "A",
+            "corrige_latex": r"\section*{Exercice 1} ...",
+            "sujet_latex": r"\textit{Sujet joint en PDF.}",
+        }]
     return prefix + f"""
 CALIBRAGE DE LA CORRECTION — même écran, boucle par lots.
 Corrige exactement ce lot : {target}.
@@ -347,17 +395,10 @@ Donne aussi moyenne_estimee, ton estimation actuelle de la moyenne finale de la 
 {_correction_json_contract()}
 
 ENVELOPPE FINALE À RENDRE
-Rends uniquement UN bloc JSON complet, sans commentaire autour :
-{{
-  "dossier": "{ident}",
-  "revision": {d["revision"]},
-  "pretraitement": "... obligatoire uniquement au premier lot ...",
-  "corriges": "... obligatoire uniquement au premier lot ...",
-  "corrections": ["... objets conformes au contrat ci-dessus ..."],
-  "a_revoir": [],
-  "moyenne_estimee": 12.5
-}}
-Au premier lot, remplace pretraitement et corriges par leurs objets/listes complets conformes aux contrats ci-dessus. Aux lots suivants, OMETS complètement les clés pretraitement et corriges sauf demande explicite de l'enseignant.
+Rends uniquement UN bloc JSON complet, sans commentaire autour.
+Voici un EXEMPLE STRUCTUREL VALIDE pour ce lot ; remplace les valeurs par celles réellement lues/corrigées :
+{public_json(example)}
+{"Au premier lot, pretraitement et corriges sont obligatoires et doivent être complets." if first else "Pour ce lot, n'ajoute PAS pretraitement ni corriges : ils sont déjà enregistrés."}
 Ne remplace jamais une structure inconnue par une supposition : le présent contrat décrit tous les champs autorisés.
 """
 
