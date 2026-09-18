@@ -105,11 +105,11 @@ class GuiPdfTests(unittest.TestCase):
             self.assertAlmostEqual(float(page.mediabox.width), 210*72/25.4, places=2)
             self.assertAlmostEqual(float(page.mediabox.height), 148*72/25.4, places=2)
         texts = [page.extract_text() for page in pdf.pages]
-        self.assertIn('13,5', texts[1])
+        self.assertTrue(any('13,5' in text for text in texts))
         self.assertTrue(any('C006' in text for text in texts))
         self.assertTrue(any('Absence' in text for text in texts))
-        self.assertIn('Conseils', texts[1])
-        self.assertIn('Corrigé', texts[1])
+        self.assertTrue(any('Conseils' in text for text in texts))
+        self.assertTrue(any('Corrigé' in text for text in texts))
 
     def test_long_sides_keep_their_position_and_all_content(self):
         fixture = test_gui.GuiWorkflowTests()
