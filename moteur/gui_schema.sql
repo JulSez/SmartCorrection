@@ -41,6 +41,11 @@ CREATE TABLE IF NOT EXISTS ui_page_ignoree (
  dossier_id TEXT NOT NULL REFERENCES ui_dossier(id), page INTEGER NOT NULL CHECK(page>0),
  motif TEXT NOT NULL, PRIMARY KEY(dossier_id,page)
 );
+CREATE TABLE IF NOT EXISTS ui_verification (
+ copie_id INTEGER NOT NULL REFERENCES copie(id) ON DELETE CASCADE,
+ ordre INTEGER NOT NULL CHECK(ordre>0), texte TEXT NOT NULL,
+ PRIMARY KEY(copie_id,ordre)
+);
 CREATE TABLE IF NOT EXISTS ui_brouillon (
  dossier_id TEXT NOT NULL REFERENCES ui_dossier(id), etape TEXT NOT NULL, texte TEXT NOT NULL,
  PRIMARY KEY(dossier_id,etape)
