@@ -174,8 +174,12 @@ def render_student(student, subject, cfg):
     if not individual_only:
         def score(value):
             return '--' if value is None else fmt(round(value, 2))
-        lines += [r'{\scriptsize Individuelle : ' + score(student.get('note_individuelle')) + '/' + fmt(cfg.note_individuelle_max)
-                  + r' \textbullet{} Groupe : ' + score(student.get('note_groupe')) + '/' + fmt(cfg.note_groupe_max) + r'}\par']
+        pending = student.get('etat_groupe')
+        group_value = 'En attente' if pending and pending.startswith('En attente') else ('À traiter' if pending else score(student.get('note_groupe')))
+        final_value = '--' if pending else score(student.get('note_finale'))
+        lines += [r'{\scriptsize Individuelle /' + fmt(cfg.note_individuelle_max) + ' : ' + score(student.get('note_individuelle'))
+                  + r' \textbullet{} Groupe /' + fmt(cfg.note_groupe_max) + ' : ' + esc(group_value)
+                  + r' \textbullet{} Finale /' + fmt(cfg.note_finale_max) + ' : ' + final_value + r'}\par']
     lines += [r'{\color{SCblue}\hrule height .7pt}\vspace{1mm}', r'\section*{Correction}']
 
     if student.get('statut') == 'absent':
