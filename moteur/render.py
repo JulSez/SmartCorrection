@@ -307,7 +307,8 @@ def compile_pdf(tex_path, timeout=60):
         except subprocess.TimeoutExpired as exc:
             raise RuntimeError(f'Compilation trop longue : {tex_path.name}') from exc
         if run.returncode:
-            output = (run.stdout or b'').decode('utf-8', errors='replace')\n            raise RuntimeError(f'Compilation échouée : {tex_path.name}\\n{output[-2500:]}')
+            output = (run.stdout or b'').decode('utf-8', errors='replace')
+            raise RuntimeError(f'Compilation échouée : {tex_path.name}\n{output[-2500:]}')
     compiled = tex_path.parent/(jobname+'.pdf')
     if not compiled.is_file():
         raise RuntimeError('Aucun PDF produit')
