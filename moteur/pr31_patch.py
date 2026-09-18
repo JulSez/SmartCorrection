@@ -205,7 +205,7 @@ def _calibration_prompt(app, ident):
             pass
     first_fields = """
 Pour ce PREMIER lot seulement, le même JSON doit aussi contenir :
-- pretraitement : inventaire COMPLET de toutes les copies du paquet, pages, versions et pages ignorées. Pour chaque copie : reference, numero (toujours null), version, pages ;
+- pretraitement : inventaire COMPLET de toutes les copies du paquet, pages, versions et pages ignorées. Pour chaque copie : reference, identite_lue, numero (toujours null), version, pages. Dans identite_lue, recopie l’identité effectivement visible sur la copie : numéro écrit par l’élève si présent, sinon nom/prénom lisible ; null si rien n’est lisible. N’invente jamais une identité ;
 - corriges : tous les corrigés de référence, adaptés au format de sortie déjà choisi.
 """ if first else """
 Le prétraitement et les corrigés sont déjà enregistrés : ne les répète pas sauf si l'enseignant t'a explicitement demandé de les corriger.
@@ -225,7 +225,7 @@ Rends uniquement UN JSON complet :
 {{
   "dossier": "{ident}",
   "revision": {d["revision"]},
-  "pretraitement": {{"copies": [{{"reference": "C001", "numero": null, "version": "A", "pages": [1, 2]}}], "pages_ignorees": [], "absents": []}},
+  "pretraitement": {{"copies": [{{"reference": "C001", "identite_lue": "17 ou Alice DUPONT", "numero": null, "version": "A", "pages": [1, 2]}}], "pages_ignorees": [], "absents": []}},
   "corriges": [{{"version": "A", "corrige_latex": "..."}}, ...],
   "corrections": [{{"reference": "C001", "items": [...], "annotations": [], "conseils": [], "commentaire_global": null, "a_verifier": []}}, ...],
   "a_revoir": [],
