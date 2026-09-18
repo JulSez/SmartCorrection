@@ -97,6 +97,11 @@ def _calibration(self, conn, dossier, data):
         if not isinstance(raw, dict):
             raise ValueError("Le premier JSON de calibrage doit contenir pretraitement.")
         packed = dict(raw, dossier=dossier["id"], revision=dossier["revision"])
+        # numero is a local roster field, not something the AI should have to invent.
+        # Accept its omission in the calibration JSON and normalize it to null.
+        copies = packed.get("copies")
+        if isinstance(copies, list):
+            packed["copies"] = [dict(item, numero=item.get("numero")) if isinstance(item, dict) else item for item in copies]
         prep = pr25._validate_preprocessing(packed, dossier, pr20._anonymity(conn, dossier["id"]))
         _set_meta(conn, pr20._meta_key(dossier["id"]), json.dumps(prep, ensure_ascii=False))
         pr20._materialize_preprocessing(conn, dossier, prep)
@@ -200,7 +205,7 @@ def _calibration_prompt(app, ident):
             pass
     first_fields = """
 Pour ce PREMIER lot seulement, le même JSON doit aussi contenir :
-- pretraitement : inventaire COMPLET de toutes les copies du paquet, pages, versions et pages ignorées ;
+- pretraitement : inventaire COMPLET de toutes les copies du paquet, pages, versions et pages ignorées. Pour chaque copie : reference, numero (toujours null), version, pages ;
 - corriges : tous les corrigés de référence, adaptés au format de sortie déjà choisi.
 """ if first else """
 Le prétraitement et les corrigés sont déjà enregistrés : ne les répète pas sauf si l'enseignant t'a explicitement demandé de les corriger.
@@ -220,7 +225,7 @@ Rends uniquement UN JSON complet :
 {{
   "dossier": "{ident}",
   "revision": {d["revision"]},
-  "pretraitement": {{"copies": [...], "pages_ignorees": [...], "absents": []}},
+  "pretraitement": {{"copies": [{{"reference": "C001", "numero": null, "version": "A", "pages": [1, 2]}}], "pages_ignorees": [], "absents": []}},
   "corriges": [{{"version": "A", "corrige_latex": "..."}}, ...],
   "corrections": [{{"reference": "C001", "items": [...], "annotations": [], "conseils": [], "commentaire_global": null, "a_verifier": []}}, ...],
   "a_revoir": [],
