@@ -157,10 +157,9 @@ def render_student(student, subject, cfg):
              r'\renewcommand{\section}{\@startsection{section}{1}{0pt}{6pt}{3pt}{\color{SCblue}\bfseries\normalsize}}',
              r'\renewcommand{\subsection}{\@startsection{subsection}{2}{0pt}{5pt}{2pt}{\color{SCblue}\bfseries\normalsize}}',
              r'\def\SCpanel{Correction}',
-             r'\def\@oddfoot{\hfil{\small\color{SCblue}\SCpanel\enspace\textbullet\enspace\thepage}\hfil}',
-             r'\let\@evenfoot\@oddfoot\def\@oddhead{}\def\@evenhead{}',
+             r'\def\@oddfoot{}\let\@evenfoot\@oddfoot\def\@oddhead{}\def\@evenhead{}',
              r'\makeatother',
-             r'\newcommand{\SCtitle}[1]{{\fontsize{15}{17}\selectfont\bfseries\color{SCblue}\strut#1}\par\vspace{1mm}{\color{SCblue}\hrule height .7pt}\vspace{2mm}}',
+             r'\pagestyle{empty}',
              r'\begin{document}\normalsize',
              r'\setlength{\abovedisplayskip}{4pt}\setlength{\belowdisplayskip}{4pt}\allowdisplaybreaks']
 
@@ -238,7 +237,7 @@ def render_student(student, subject, cfg):
 
     lines += [r'\label{sc-correction-end}\clearpage',
               r'\def\SCpanel{Corrigé}\setcounter{page}{1}',
-              r'{\bfseries\color{SCblue} Corrigé}\par\vspace{2mm}',
+              r'\section*{Corrigé}',
               student.get('corrige_latex') or 'Aucun corrigé enregistré pour cette version.',
               r'\end{document}', '']
     return '\n'.join(lines)
