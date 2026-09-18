@@ -34,6 +34,8 @@ class ReintegratedCorrectionLayoutTests(unittest.TestCase):
         self.assertIn(r'\section*{Correction}', tex)
         self.assertIn(r'\section*{Conseils}', tex)
         self.assertIn(r'\section*{Grille}', tex)
+        self.assertIn('Critère / erreur', tex)
+        self.assertIn('Signe à revoir', tex)
         self.assertIn(r'\dotfill', tex)
         self.assertIn(r'\noalign{\hrule height 1.2pt}', tex)
         self.assertNotIn('À vérifier par le prof', tex)
