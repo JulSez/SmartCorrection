@@ -404,7 +404,7 @@ class Application:
         copies={c['reference']:c for c in self._copies(conn,dossier)}
         seen=set();summary=[]
         for correction in array(data['corrections'],'corrections'):
-            object_fields(correction,{'reference','items','annotations','conseils','commentaire_global'},{'reference','items'})
+            object_fields(correction,{'reference','items','annotations','conseils','commentaire_global','a_verifier'},{'reference','items'})
             ref=string(correction['reference'])
             if ref in seen or ref not in copies:
                 raise ValueError(f'Copie répétée ou inconnue : {ref}')
@@ -427,9 +427,14 @@ class Application:
             for annotation in array(correction.get('annotations',[]),'annotations'):
                 if not isinstance(annotation,dict) or annotation.get('page') not in copy['pages']:
                     raise ValueError(f'{ref} : annotation sur une page extérieure à la copie')
-            payload={k:v for k,v in correction.items() if k!='reference'}
+            checks=[string(x,'élément à vérifier').strip() for x in array(correction.get('a_verifier',[]),'a_verifier')]
+            checks=[x for x in checks if x]
+            payload={k:v for k,v in correction.items() if k not in {'reference','a_verifier'}}
             payload.update(copie_id=copy['copie_id'],grille_id=grid_id)
             cid=import_correction(payload,conn,replace=True)
+            conn.execute('DELETE FROM ui_verification WHERE copie_id=?',(copy['copie_id'],))
+            for order,text in enumerate(checks,1):
+                conn.execute('INSERT INTO ui_verification(copie_id,ordre,texte) VALUES(?,?,?)',(copy['copie_id'],order,text))
             conn.execute('UPDATE ui_copie SET a_revoir=NULL WHERE dossier_id=? AND reference=?',(dossier['id'],ref))
             score=conn.execute('SELECT note_brute FROM correction WHERE id=?',(cid,)).fetchone()[0]
             summary.append({'reference':ref,'note_brute':score,'bareme':sum(maxima.values()),'remplacement':bool(copy['correction_id'])})

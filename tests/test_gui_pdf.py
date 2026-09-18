@@ -80,7 +80,7 @@ class GuiPdfTests(unittest.TestCase):
         fixture.app.include_in_final(fixture.ident, 'C006', False)
         final = fixture.app.generate(fixture.ident, final=True, pdf=True)
         pdf = PdfReader(fixture.app.file('rendu', final['id'], 'corrections.pdf'))
-        self.assertEqual(len(pdf.pages), 6)
+        self.assertEqual(len(pdf.pages), 11)
         self.assertNotIn('C006', '\n'.join(p.extract_text() for p in pdf.pages))
         fixture.app.include_in_final(fixture.ident, 'C006', True)
         # The original correction is retained; after repair it can be included again.
@@ -89,7 +89,7 @@ class GuiPdfTests(unittest.TestCase):
         fixture.app.sample(fixture.ident, [f'C{i:03d}' for i in range(1, 6)], True)
         restored = fixture.app.generate(fixture.ident, final=True, pdf=True)
         pdf = PdfReader(fixture.app.file('rendu', restored['id'], 'corrections.pdf'))
-        self.assertEqual(len(pdf.pages), 7)
+        self.assertEqual(len(pdf.pages), 13)
         self.assertIn('C006', '\n'.join(p.extract_text() for p in pdf.pages))
 
     def test_fiches_and_combined_document(self):
@@ -100,16 +100,16 @@ class GuiPdfTests(unittest.TestCase):
         fixture.exchange('correction', fixture.corrections(['C006']))
         result = fixture.app.generate(fixture.ident, final=True, pdf=True)
         pdf = PdfReader(fixture.app.file('rendu', result['id'], 'corrections.pdf'))
-        self.assertEqual(len(pdf.pages), 7, result['fichiers'])
+        self.assertEqual(len(pdf.pages), 13, result['fichiers'])
         for page in pdf.pages:
             self.assertAlmostEqual(float(page.mediabox.width), 210*72/25.4, places=2)
             self.assertAlmostEqual(float(page.mediabox.height), 148*72/25.4, places=2)
         texts = [page.extract_text() for page in pdf.pages]
-        self.assertIn('13,5', texts[1])
+        self.assertTrue(any('13,5' in text for text in texts))
         self.assertTrue(any('C006' in text for text in texts))
         self.assertTrue(any('Absence' in text for text in texts))
-        self.assertIn('Conseils', texts[1])
-        self.assertIn('Corrigé', texts[1])
+        self.assertTrue(any('Conseils' in text for text in texts))
+        self.assertTrue(any('Corrigé' in text for text in texts))
 
     def test_long_sides_keep_their_position_and_all_content(self):
         fixture = test_gui.GuiWorkflowTests()

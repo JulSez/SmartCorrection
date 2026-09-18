@@ -5,6 +5,7 @@ import json
 from contextlib import contextmanager
 
 from . import workflow_v2 as workflow
+from . import render as render_module
 from .db import database
 from .gui_service import INDIVIDUAL, response_body
 from .notes import config_from_mapping
@@ -13,6 +14,7 @@ from .validation import parse_json
 WorkflowApplication = workflow.WorkflowApplication
 _BASE_STATE = WorkflowApplication.state
 _BASE_SAVE_FORMATS = WorkflowApplication.save_formats
+_BASE_GENERATE = WorkflowApplication.generate
 
 SIZES = ('A6', 'A5', 'A4')
 ORIENTATIONS = ('portrait', 'paysage')
@@ -22,7 +24,7 @@ LOREM = (r'\section*{Exemple} Lorem ipsum dolor sit amet, consectetur adipiscing
          r'\[x^2=5\iff x=\pm\sqrt5\]')
 
 _DEFAULT_LAYOUT = {
-    'correction': {'size': 'A6', 'orientation': 'portrait', 'pages': 1},
+    'correction': {'size': 'A6', 'orientation': 'portrait', 'pages': 1, 'newpage_after_correction': True},
     'corrige': {'size': 'A6', 'orientation': 'portrait', 'pages': 1, 'columns': 1},
     'assembly': 'cote-a-cote',
     'print_format': 'auto',
@@ -67,6 +69,10 @@ def _validate_layout(layout):
         if pages < 1 or pages > 8:
             raise ValueError('Nombre de pages attendu : 1 à 8')
         item['pages'] = pages
+    page_break = layout['correction'].get('newpage_after_correction', True)
+    if type(page_break) is not bool:
+        raise ValueError('Saut de page après correction : booléen attendu')
+    layout['correction']['newpage_after_correction'] = page_break
     cols = int(layout['corrige'].get('columns', 1))
     if cols not in (1, 2):
         raise ValueError('Le corrigé accepte 1 ou 2 colonnes')
@@ -106,9 +112,10 @@ def _layout_summary(layout):
         extra = ' Deux A6 portrait côte à côte forment une feuille A5 paysage.'
         if terminal == 'A4':
             extra += ' Deux feuilles A5 paysage seront imposées sur chaque feuille A4.'
+    page_break = 'oui' if c.get('newpage_after_correction', True) else 'non'
     return (f"Correction : {c['pages']}× {c['size']} {c['orientation']} ; "
             f"Corrigé : {r['pages']}× {r['size']} {r['orientation']}, {r['columns']} colonne(s) ; "
-            f"assemblage : {join} ; impression terminale : {terminal}." + extra)
+            f"saut après correction : {page_break} ; assemblage : {join} ; impression terminale : {terminal}." + extra)
 
 
 def _state(self, ident):
@@ -175,7 +182,11 @@ def _apply_source_layout(source, layout):
 def _layout_renderer(layout):
     base = workflow.render_student
     def render(student, subject, cfg):
-        return _apply_source_layout(base(student, subject, cfg), layout)
+        token = render_module._CORRECTION_PAGE_BREAK.set(layout['correction'].get('newpage_after_correction', True))
+        try:
+            return _apply_source_layout(base(student, subject, cfg), layout)
+        finally:
+            render_module._CORRECTION_PAGE_BREAK.reset(token)
     old = workflow.render_student
     workflow.render_student = render
     try:
@@ -231,3 +242,14 @@ WorkflowApplication.save_formats = _save_formats
 WorkflowApplication.layout_preview = _layout_preview
 WorkflowApplication.corrige_preview = _corrige_preview
 WorkflowApplication.grid_preview = _grid_preview
+
+def _generate(self, ident, final=False, pdf=True):
+    with database(self.db_path) as conn:
+        layout = _layout(conn, ident)
+    token = render_module._CORRECTION_PAGE_BREAK.set(layout['correction'].get('newpage_after_correction', True))
+    try:
+        return _BASE_GENERATE(self, ident, final=final, pdf=pdf)
+    finally:
+        render_module._CORRECTION_PAGE_BREAK.reset(token)
+
+WorkflowApplication.generate = _generate
