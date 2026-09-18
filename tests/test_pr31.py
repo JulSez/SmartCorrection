@@ -75,6 +75,37 @@ class FastCalibrationWorkflowTests(unittest.TestCase):
         self.app.sample(self.ident, ['C006'], True)
         self.assertTrue(self.app.state(self.ident)['dossier']['echantillon_valide'])
 
+    def test_calibration_accepts_code_alias_and_prompt_documents_item_code(self):
+        bareme = self.envelope({
+            'versions': [{'version': 'A'}],
+            'grilles': [{'nom': 'Barème', 'version': 'A', 'exercices': [
+                {'numero': '1', 'questions': [{'numero': '1', 'items': [
+                    {'code': 'E1Q1I1', 'description': 'Résoudre', 'bareme_max': 2},
+                ]}]}
+            ]}],
+        })
+        self.app.exchange(self.ident, 'bareme', json.dumps(bareme), True)
+        prompt = make_prompt(self.app, self.ident, 'calibrage')
+        self.assertIn('"item_code": "E1Q1I1"', prompt)
+        self.assertIn('jamais "code"', prompt)
+
+        first = self.envelope({
+            'pretraitement': {
+                'copies': [{'reference': 'C001', 'identite_lue': '1', 'version': 'A', 'pages': [1]}],
+                'pages_ignorees': [], 'absents': [],
+            },
+            'corriges': [{'version': 'A', 'corrige_latex': r'$x=2$.'}],
+            'corrections': [{
+                'reference': 'C001',
+                'items': [{'code': 'E1Q1I1', 'points_obtenus': 1, 'commentaire': 'Erreur.'}],
+                'annotations': [], 'conseils': [], 'commentaire_global': None, 'a_verifier': [],
+            }],
+            'a_revoir': [], 'moyenne_estimee': 10,
+        })
+        self.app.exchange(self.ident, 'calibrage', json.dumps(first), True)
+        state = self.app.state(self.ident)
+        self.assertTrue(state['copies'][0]['correction_id'])
+
     def test_prompts_match_fast_workflow(self):
         opening = make_prompt(self.app, self.ident, 'bareme')
         self.assertIn("Ne rends PAS le JSON", opening)

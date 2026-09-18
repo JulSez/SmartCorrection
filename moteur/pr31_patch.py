@@ -84,6 +84,31 @@ def _save_corriges(conn, dossier, entries):
         raise ValueError(f"Corrigé manquant pour : {missing}")
 
 
+def _normalize_correction_items(corrections):
+    """Accept the common AI alias 'code' but store the canonical 'item_code'."""
+    normalized = []
+    for correction in corrections:
+        if not isinstance(correction, dict):
+            normalized.append(correction)
+            continue
+        copy = dict(correction)
+        items = []
+        for item in copy.get("items", []):
+            if not isinstance(item, dict):
+                items.append(item)
+                continue
+            clean = dict(item)
+            if "code" in clean:
+                if "item_code" in clean and clean["item_code"] != clean["code"]:
+                    raise ValueError("Un item contient code et item_code avec des valeurs différentes.")
+                clean.setdefault("item_code", clean["code"])
+                clean.pop("code", None)
+            items.append(clean)
+        copy["items"] = items
+        normalized.append(copy)
+    return normalized
+
+
 def _calibration(self, conn, dossier, data):
     allowed = {"dossier", "revision", "pretraitement", "corriges", "corrections", "a_revoir", "moyenne_estimee"}
     object_fields(data, allowed, {"dossier", "revision", "corrections", "moyenne_estimee"})
@@ -117,7 +142,7 @@ def _calibration(self, conn, dossier, data):
     elif "corriges" in data:
         _save_corriges(conn, dossier, data["corriges"])
 
-    corrections = array(data["corrections"], "corrections", True)
+    corrections = _normalize_correction_items(array(data["corrections"], "corrections", True))
     refs = [string(c.get("reference"), "reference") for c in corrections if isinstance(c, dict)]
     if not 1 <= len(refs) <= 5 or len(set(refs)) != len(refs):
         raise ValueError("Le lot de calibrage doit contenir entre 1 et 5 copies distinctes.")
@@ -227,12 +252,11 @@ Rends uniquement UN JSON complet :
   "revision": {d["revision"]},
   "pretraitement": {{"copies": [{{"reference": "C001", "identite_lue": "17 ou Alice DUPONT", "numero": null, "version": "A", "pages": [1, 2]}}], "pages_ignorees": [], "absents": []}},
   "corriges": [{{"version": "A", "corrige_latex": "..."}}, ...],
-  "corrections": [{{"reference": "C001", "items": [...], "annotations": [], "conseils": [], "commentaire_global": null, "a_verifier": []}}, ...],
+  "corrections": [{{"reference": "C001", "items": [{{"item_code": "E1Q1I1", "points_obtenus": 1, "commentaire": "..."}}], "annotations": [], "conseils": [], "commentaire_global": null, "a_verifier": []}}, ...],
   "a_revoir": [],
   "moyenne_estimee": 12.5
 }}
-Les champs pretraitement et corriges sont obligatoires au premier lot et facultatifs ensuite.
-"""
+Dans corrections → items, utilise toujours la clé "item_code" (jamais "code") pour référencer un item du barème, par exemple "item_code": "E1Q1I1".\nLes champs pretraitement et corriges sont obligatoires au premier lot et facultatifs ensuite.\n"""
 
 
 def _make_prompt(app, ident, stage, version=None, mode="echantillon"):
