@@ -49,6 +49,27 @@ class FlexibleCopyIdentityTests(unittest.TestCase):
         state = self.app.state(self.ident)
         copy = next(c for c in state['pretraitement']['copies'] if c['reference'] == 'C001')
         self.assertIsNone(copy.get('eleve_id'))
+        self.assertTrue(copy.get('affectation_bloquee'))
+        # Reloading state must not auto-match the old name back onto the copy.
+        state = self.app.state(self.ident)
+        copy = next(c for c in state['pretraitement']['copies'] if c['reference'] == 'C001')
+        self.assertIsNone(copy.get('eleve_id'))
+
+    def test_clear_blocks_name_based_rematch_in_non_anonymous_mode(self):
+        self.app.save_anonymity(self.ident, False)
+        payload = self._payload()
+        payload['copies'][0]['nom'] = 'Alpha'
+        payload['copies'][0]['prenom'] = 'Alice'
+        self.app.exchange(self.ident, 'pretraitement', json.dumps(payload), True)
+        state = self.app.state(self.ident)
+        copy = next(c for c in state['pretraitement']['copies'] if c['reference'] == 'C001')
+        self.assertIsNotNone(copy.get('eleve_id'))
+        self.app.review(self.ident, '@affectation:C001:')
+        state = self.app.state(self.ident)
+        copy = next(c for c in state['pretraitement']['copies'] if c['reference'] == 'C001')
+        self.assertIsNone(copy.get('eleve_id'))
+        self.assertEqual(copy.get('nom'), 'Alpha')
+        self.assertEqual(copy.get('prenom'), 'Alice')
 
     def test_ui_exposes_manual_assignment_and_unassigned_choice(self):
         root = Path(__file__).resolve().parents[1]

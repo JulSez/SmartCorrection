@@ -19,18 +19,19 @@ _BASE_GENERATE = WorkflowApplication.generate
 
 
 def compact_corrige_source(student, subject, cfg):
-    """Keep the correction sheet unchanged and leave only the Corrigé label on the answer panel."""
+    """Keep the correction sheet unchanged and use the compact Corrigé section heading."""
     source = _BASE_RENDER_STUDENT(student, subject, cfg)
-    marker = r'\def\SCpanel{Corrigé}\setcounter{page}{1}'
-    compact = marker + '\n' + r'{\bfseries\color{SCblue} Corrigé}\par\vspace{2mm}'
-    if compact in source:
+    if r'\section*{Corrigé}' in source:
         return source
+    marker = r'\def\SCpanel{Corrigé}\setcounter{page}{1}'
     start = source.find(marker)
     if start == -1:
         raise RuntimeError('En-tête du corrigé introuvable dans le rendu')
-    body = source.find(student.get('corrige_latex') or 'Aucun corrigé enregistré pour cette version.', start)
+    body_text = student.get('corrige_latex') or 'Aucun corrigé enregistré pour cette version.'
+    body = source.find(body_text, start)
     if body == -1:
         raise RuntimeError('Corps du corrigé introuvable dans le rendu')
+    compact = marker + '\n' + r'\section*{Corrigé}'
     return source[:start] + compact + '\n' + source[body:]
 
 
