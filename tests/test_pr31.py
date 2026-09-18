@@ -42,8 +42,8 @@ class FastCalibrationWorkflowTests(unittest.TestCase):
 
         first = self.envelope({
             'pretraitement': {
-                # numero is deliberately omitted: the AI should not need to know the local roster id.
-                'copies': [{'reference': f'C{i:03d}', 'version': 'A', 'pages': [i]} for i in range(1, 7)],
+                # numero is deliberately omitted. The AI only reports what it can actually read on the copy.
+                'copies': [{'reference': f'C{i:03d}', 'identite_lue': (i if i == 1 else ('Alpha Alice' if i == 2 else None)), 'version': 'A', 'pages': [i]} for i in range(1, 7)],
                 'pages_ignorees': [], 'absents': [],
             },
             'corriges': [{'version': 'A', 'corrige_latex': r'\section*{Exercice 1} $x=2$.'}],
@@ -57,6 +57,10 @@ class FastCalibrationWorkflowTests(unittest.TestCase):
         self.assertEqual({c['reference'] for c in state['copies'] if c['echantillon']},
                          {f'C{i:03d}' for i in range(1, 6)})
         self.assertEqual(state['calibrage']['moyenne_estimee'], '14.5')
+        prep = state['pretraitement']['copies']
+        self.assertEqual(next(c for c in prep if c['reference']=='C001')['identite_lue'], '1')
+        self.assertEqual(next(c for c in prep if c['reference']=='C002')['identite_lue'], 'Alpha Alice')
+        self.assertIsNone(next(c for c in state['copies'] if c['reference']=='C001')['eleve_id'])
 
         self.app.draft(self.ident, 'calibrage-retours', 'Sanctionner davantage les petites erreurs de calcul.')
         self.app.sample(self.ident, ['C006'], False)
@@ -79,6 +83,9 @@ class FastCalibrationWorkflowTests(unittest.TestCase):
         opening = make_prompt(self.app, self.ident, 'bareme')
         self.assertIn("Ne rends PAS le JSON", opening)
         self.assertIn("Quand l'enseignant valide le barème", opening)
+        calibration = make_prompt(self.app, self.ident, 'calibrage')
+        self.assertIn('identite_lue', calibration)
+        self.assertIn('numéro si un numéro d’élève est écrit', calibration)
 
 
 if __name__ == '__main__':
