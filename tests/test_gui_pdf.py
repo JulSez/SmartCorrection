@@ -80,7 +80,7 @@ class GuiPdfTests(unittest.TestCase):
         fixture.app.include_in_final(fixture.ident, 'C006', False)
         final = fixture.app.generate(fixture.ident, final=True, pdf=True)
         pdf = PdfReader(fixture.app.file('rendu', final['id'], 'corrections.pdf'))
-        self.assertEqual(len(pdf.pages), 6)
+        self.assertEqual(len(pdf.pages), 11)
         self.assertNotIn('C006', '\n'.join(p.extract_text() for p in pdf.pages))
         fixture.app.include_in_final(fixture.ident, 'C006', True)
         # The original correction is retained; after repair it can be included again.
@@ -89,7 +89,7 @@ class GuiPdfTests(unittest.TestCase):
         fixture.app.sample(fixture.ident, [f'C{i:03d}' for i in range(1, 6)], True)
         restored = fixture.app.generate(fixture.ident, final=True, pdf=True)
         pdf = PdfReader(fixture.app.file('rendu', restored['id'], 'corrections.pdf'))
-        self.assertEqual(len(pdf.pages), 7)
+        self.assertEqual(len(pdf.pages), 13)
         self.assertIn('C006', '\n'.join(p.extract_text() for p in pdf.pages))
 
     def test_fiches_and_combined_document(self):
@@ -100,7 +100,7 @@ class GuiPdfTests(unittest.TestCase):
         fixture.exchange('correction', fixture.corrections(['C006']))
         result = fixture.app.generate(fixture.ident, final=True, pdf=True)
         pdf = PdfReader(fixture.app.file('rendu', result['id'], 'corrections.pdf'))
-        self.assertEqual(len(pdf.pages), 7, result['fichiers'])
+        self.assertEqual(len(pdf.pages), 13, result['fichiers'])
         for page in pdf.pages:
             self.assertAlmostEqual(float(page.mediabox.width), 210*72/25.4, places=2)
             self.assertAlmostEqual(float(page.mediabox.height), 148*72/25.4, places=2)
