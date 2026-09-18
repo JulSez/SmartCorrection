@@ -100,9 +100,29 @@ def _calibration(self, conn, dossier, data):
         # numero is a local roster field, not something the AI should have to invent.
         # Accept its omission in the calibration JSON and normalize it to null.
         copies = packed.get("copies")
+        read_identities = {}
         if isinstance(copies, list):
-            packed["copies"] = [dict(item, numero=item.get("numero")) if isinstance(item, dict) else item for item in copies]
+            normalized = []
+            for item in copies:
+                if not isinstance(item, dict):
+                    normalized.append(item)
+                    continue
+                clean = dict(item)
+                identity = clean.pop("identite_lue", None)
+                if identity is not None and not isinstance(identity, (str, int)):
+                    raise ValueError("identite_lue doit être un nom, un numéro ou null")
+                if identity is not None:
+                    identity = str(identity).strip() or None
+                if identity:
+                    read_identities[clean.get("reference")] = identity
+                clean["numero"] = clean.get("numero")
+                normalized.append(clean)
+            packed["copies"] = normalized
         prep = pr25._validate_preprocessing(packed, dossier, pr20._anonymity(conn, dossier["id"]))
+        for item in prep.get("copies", []):
+            identity = read_identities.get(item.get("reference"))
+            if identity:
+                item["identite_lue"] = identity
         _set_meta(conn, pr20._meta_key(dossier["id"]), json.dumps(prep, ensure_ascii=False))
         pr20._materialize_preprocessing(conn, dossier, prep)
 
@@ -205,7 +225,7 @@ def _calibration_prompt(app, ident):
             pass
     first_fields = """
 Pour ce PREMIER lot seulement, le même JSON doit aussi contenir :
-- pretraitement : inventaire COMPLET de toutes les copies du paquet, pages, versions et pages ignorées. Pour chaque copie : reference, numero (toujours null), version, pages ;
+- pretraitement : inventaire COMPLET de toutes les copies du paquet, pages, versions et pages ignorées. Pour chaque copie : reference, numero (toujours null), version, pages et identite_lue. identite_lue contient exactement ce qui est lisible sur la copie pour aider l’enseignant à réaffecter localement : numéro d’élève si visible, sinon nom/prénom si visible, sinon null. N’invente jamais une identité ;
 - corriges : tous les corrigés de référence, adaptés au format de sortie déjà choisi.
 """ if first else """
 Le prétraitement et les corrigés sont déjà enregistrés : ne les répète pas sauf si l'enseignant t'a explicitement demandé de les corriger.
@@ -213,6 +233,7 @@ Le prétraitement et les corrigés sont déjà enregistrés : ne les répète pa
     return prefix + f"""
 CALIBRAGE DE LA CORRECTION — même écran, boucle par lots.
 Corrige exactement ce lot : {target}.
+Pour le prétraitement, lis l’identité visible sur chaque copie et place-la uniquement dans identite_lue : numéro si un numéro d’élève est écrit, sinon nom/prénom s’ils sont lisibles, sinon null. Cette identité sert seulement au rapprochement local par l’enseignant : ne l’utilise pas pour modifier la correction et n’invente rien.
 {first_fields}
 Applique le barème validé et toutes les décisions pédagogiques suivantes, accumulées pendant le calibrage :
 --- DÉCISIONS DE L'ENSEIGNANT ---
@@ -225,7 +246,7 @@ Rends uniquement UN JSON complet :
 {{
   "dossier": "{ident}",
   "revision": {d["revision"]},
-  "pretraitement": {{"copies": [{{"reference": "C001", "numero": null, "version": "A", "pages": [1, 2]}}], "pages_ignorees": [], "absents": []}},
+  "pretraitement": {{"copies": [{{"reference": "C001", "numero": null, "identite_lue": "12 ou DUPONT Alice", "version": "A", "pages": [1, 2]}}], "pages_ignorees": [], "absents": []}},
   "corriges": [{{"version": "A", "corrige_latex": "..."}}, ...],
   "corrections": [{{"reference": "C001", "items": [...], "annotations": [], "conseils": [], "commentaire_global": null, "a_verifier": []}}, ...],
   "a_revoir": [],
