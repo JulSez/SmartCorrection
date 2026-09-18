@@ -26,25 +26,65 @@ function bindAnonymity(){
  });
 }
 
+function studentLabel(s){
+ const name=[s.prenom,s.nom].filter(Boolean).join(' ');
+ return 'n° '+s.numero+' — '+name;
+}
+function normalizeStudentSearch(value){
+ return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+}
+function studentMatches(s,query){
+ const q=normalizeStudentSearch(query);
+ if(!q)return true;
+ const fields=[String(s.numero),s.nom,s.prenom,[s.prenom,s.nom].filter(Boolean).join(' '),[s.nom,s.prenom].filter(Boolean).join(' ')];
+ return fields.some(value=>normalizeStudentSearch(value).split(/[\s-]+/).some(part=>part.startsWith(q))||normalizeStudentSearch(value).startsWith(q));
+}
 function assignmentPanel(prep){
  if(!prep)return '';
  const students=state.eleves||[];
+ const byId=new Map(students.map(s=>[Number(s.id),s]));
  const rows=prep.copies.map(c=>{
   const read=[c.prenom,c.nom].filter(Boolean).join(' ')||'Non reconnu par l’IA';
-  const options=['<option value="">— Non attribuée —</option>'].concat(students.map(s=>`<option value="${s.id}" ${Number(c.eleve_id)===Number(s.id)?'selected':''}>${esc(s.nom)} ${esc(s.prenom)}</option>`)).join('');
-  return `<tr><td><strong>${esc(c.reference)}</strong><br><small>p. ${c.pages.join(', ')} · version ${esc(c.version)}</small></td><td>${esc(read)}</td><td><select class="copy-student" data-reference="${esc(c.reference)}">${options}</select></td></tr>`;
+  const current=c.eleve_id==null?null:byId.get(Number(c.eleve_id));
+  const currentText=current?studentLabel(current):'Non attribuée';
+  return `<tr><td><strong>${esc(c.reference)}</strong><br><small>p. ${c.pages.join(', ')} · version ${esc(c.version)}</small></td><td>${esc(read)}</td><td><div class="student-search" data-reference="${esc(c.reference)}"><div class="student-current"><strong>${esc(currentText)}</strong>${current?'<button type="button" class="clear-student" title="Retirer l’affectation">×</button>':''}</div><input class="copy-student-search" type="search" autocomplete="off" placeholder="N° ou nom de l’élève…" aria-label="Rechercher un élève pour ${esc(c.reference)}"><div class="student-suggestions" hidden></div></div></td></tr>`;
  }).join('');
- return `<div class="card"><h3>Affectation locale des élèves</h3><p class="help">Une copie peut rester sans élève. Si l’IA se trompe ou ne lit pas le nom, choisissez simplement l’élève ici. Cette liste reste locale et n’est pas envoyée à l’IA.</p><div class="table-wrap"><table><thead><tr><th>Copie</th><th>Nom lu par l’IA</th><th>Élève</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+ return `<div class="card"><h3>Affectation locale des élèves</h3><p class="help">Une copie peut rester sans élève. Recherchez par numéro, nom ou prénom : par exemple <strong>Moh</strong> propose les élèves dont le nom ou le prénom commence par « Moh ». Cette liste reste locale et n’est pas envoyée à l’IA.</p><div class="table-wrap"><table><thead><tr><th>Copie</th><th>Nom lu par l’IA</th><th>Élève</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 function bindAssignments(){
- document.querySelectorAll('.copy-student').forEach(select=>select.onchange=()=>task(async()=>{
-  const ref=select.dataset.reference;
-  const value=select.value;
+ const students=state.eleves||[];
+ const assign=async(ref,value)=>{
   await post({action:'revue',dossier:state.dossier.id,reference:'@affectation:'+ref+':'+value});
   state=await get('/api/dossier?id='+state.dossier.id);
   renderDossier();
   toast(value?'Élève affecté à '+ref+'.':ref+' reste sans élève.');
- }));
+ };
+ document.querySelectorAll('.student-search').forEach(box=>{
+  const input=box.querySelector('.copy-student-search');
+  const suggestions=box.querySelector('.student-suggestions');
+  const ref=box.dataset.reference;
+  const renderSuggestions=()=>{
+   const q=input.value.trim();
+   const matches=students.filter(s=>studentMatches(s,q)).slice(0,8);
+   suggestions.innerHTML=matches.length?matches.map(s=>`<button type="button" class="student-suggestion" data-id="${s.id}"><span>${esc(studentLabel(s))}</span></button>`).join(''):'<div class="help">Aucun élève trouvé.</div>';
+   suggestions.hidden=false;
+   suggestions.querySelectorAll('.student-suggestion').forEach(button=>button.onclick=()=>task(()=>assign(ref,button.dataset.id)));
+  };
+  input.oninput=renderSuggestions;
+  input.onfocus=renderSuggestions;
+  input.onkeydown=event=>{
+   if(event.key==='Escape')suggestions.hidden=true;
+   if(event.key==='Enter'){
+    const first=suggestions.querySelector('.student-suggestion');
+    if(first){event.preventDefault();first.click();}
+   }
+  };
+  const clear=box.querySelector('.clear-student');
+  if(clear)clear.onclick=()=>task(()=>assign(ref,''));
+ });
+ document.addEventListener('click',event=>{
+  if(!event.target.closest('.student-search'))document.querySelectorAll('.student-suggestions').forEach(x=>x.hidden=true);
+ },{once:true});
 }
 
 renderSetup=function(){
