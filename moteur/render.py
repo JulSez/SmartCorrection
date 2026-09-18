@@ -11,8 +11,11 @@ import subprocess
 import tempfile
 import time
 import unicodedata
+from contextvars import ContextVar
 from .notes import config_from_mapping
 
+
+_CORRECTION_PAGE_BREAK = ContextVar('smartcorrection_page_break_after_correction', default=True)
 
 _MATH_SYMBOLS = {
     '×': r'\times', '÷': r'\div', '·': r'\cdot', '⋅': r'\cdot',
@@ -194,7 +197,9 @@ def render_student(student, subject, cfg):
         if feedback:
             lines += [r'\\begin{itemize}\\setlength{\\itemsep}{1pt}\\setlength{\\parskip}{0pt}'] + feedback + [r'\\end{itemize}']
 
-        lines += [r'% SC:after-correction', r'\\section*{Conseils}']
+        if _CORRECTION_PAGE_BREAK.get():
+            lines += [r'\\newpage']
+        lines += [r'\\section*{Conseils}']
         if student.get('conseils'):
             advice = [r'\\item '+esc(a['texte']) for a in student['conseils'] if a.get('texte')]
             if advice:
