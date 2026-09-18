@@ -42,8 +42,8 @@ class FastCalibrationWorkflowTests(unittest.TestCase):
 
         first = self.envelope({
             'pretraitement': {
-                # numero is deliberately omitted: the AI should not need to know the local roster id.
-                'copies': [{'reference': f'C{i:03d}', 'version': 'A', 'pages': [i]} for i in range(1, 7)],
+                # numero stays local; identite_lue is what the AI actually sees on the copy.
+                'copies': [{'reference': f'C{i:03d}', 'identite_lue': (str(i) if i <= 6 else None), 'version': 'A', 'pages': [i]} for i in range(1, 7)],
                 'pages_ignorees': [], 'absents': [],
             },
             'corriges': [{'version': 'A', 'corrige_latex': r'\section*{Exercice 1} $x=2$.'}],
@@ -79,6 +79,12 @@ class FastCalibrationWorkflowTests(unittest.TestCase):
         opening = make_prompt(self.app, self.ident, 'bareme')
         self.assertIn("Ne rends PAS le JSON", opening)
         self.assertIn("Quand l'enseignant valide le barème", opening)
+        # After barème validation, the calibration prompt explicitly asks for the visible identity.
+        bareme = self.envelope({'versions':[{'version':'A'}], 'grilles':[{'nom':'B','version':'A','exercices':[{'numero':'1','questions':[{'numero':'1','items':[{'code':'E1Q1I1','description':'Critère','bareme_max':1}]}]}]}]})
+        self.app.exchange(self.ident, 'bareme', json.dumps(bareme), True)
+        calibration = make_prompt(self.app, self.ident, 'calibrage')
+        self.assertIn('identite_lue', calibration)
+        self.assertIn('numéro écrit par l’élève', calibration)
 
 
 if __name__ == '__main__':
