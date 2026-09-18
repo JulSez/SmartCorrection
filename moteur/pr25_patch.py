@@ -72,7 +72,7 @@ def _state(self, ident):
     with database(self.db_path) as conn:
         dossier = self._dossier(conn, ident)
         result['eleves'] = [dict(r) for r in conn.execute(
-            'SELECT id,nom,prenom FROM eleve_par_classe WHERE classe=? ORDER BY nom COLLATE NOCASE,prenom COLLATE NOCASE,id',
+            'SELECT id,numero,nom,prenom FROM eleve_par_classe WHERE classe=? ORDER BY numero,nom COLLATE NOCASE,prenom COLLATE NOCASE,id',
             (dossier['classe'],)
         )]
         prep = result.get('pretraitement')
