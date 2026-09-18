@@ -27,8 +27,9 @@ def import_correction(data, conn, replace=False):
     items = {r['code']: r for r in conn.execute('SELECT * FROM item WHERE grille_id=?', (grid_id,))}
     entries = array(data['items'], 'items', True)
     codes = []
-    for entry in entries:
-        object_fields(entry, {'item_code', 'points_obtenus', 'statut', 'annotation', 'commentaire'}, {'item_code', 'points_obtenus'})
+    for index, entry in enumerate(entries):
+        where = f'correction.items[{index}]'
+        object_fields(entry, {'item_code', 'points_obtenus', 'statut', 'annotation', 'commentaire'}, {'item_code', 'points_obtenus'}, where)
         code = string(entry['item_code'])
         if code not in items:
             raise ValueError(f'Item extérieur à la grille : {code}')
@@ -66,29 +67,31 @@ def import_correction(data, conn, replace=False):
         if code not in items:
             raise ValueError(f'Référence extérieure à la grille : {code}')
         return items[code]['id']
-    for advice in array(data.get('conseils', []), 'conseils'):
-        object_fields(advice, {'item_code', 'texte', 'priorite'}, {'texte'})
+    for index, advice in enumerate(array(data.get('conseils', []), 'correction.conseils')):
+        where = f'correction.conseils[{index}]'
+        object_fields(advice, {'item_code', 'texte', 'priorite'}, {'texte'}, where)
         priority = advice.get('priorite')
         if priority is not None:
-            integer(priority, 'priorite')
+            integer(priority, where + '.priorite')
         conn.execute('INSERT INTO conseil(correction_id,item_id,texte,priorite) VALUES(?,?,?,?)',
-                     (cid, item_id(advice), string(advice['texte']), priority))
-    for annotation in array(data.get('annotations', []), 'annotations'):
-        object_fields(annotation, {'item_code', 'page', 'x', 'y', 'largeur', 'hauteur', 'texte', 'type_annotation'}, {'item_code', 'page', 'texte'})
-        page = integer(annotation['page'], 'page')
+                     (cid, item_id(advice), string(advice['texte'], where + '.texte'), priority))
+    for index, annotation in enumerate(array(data.get('annotations', []), 'correction.annotations')):
+        where = f'correction.annotations[{index}]'
+        object_fields(annotation, {'item_code', 'page', 'x', 'y', 'largeur', 'hauteur', 'texte', 'type_annotation'}, {'item_code', 'page', 'texte'}, where)
+        page = integer(annotation['page'], where + '.page')
         for key in ('x', 'y', 'largeur', 'hauteur'):
-            if annotation.get(key) is not None and number(annotation[key], key) > 1:
-                raise ValueError(f'{key} doit être entre 0 et 1')
+            if annotation.get(key) is not None and number(annotation[key], where + '.' + key) > 1:
+                raise ValueError(f'{where}.{key} doit être entre 0 et 1')
         if (annotation.get('x') is None) != (annotation.get('y') is None):
-            raise ValueError('Fournir x et y ensemble')
+            raise ValueError(f'{where}: fournir x et y ensemble')
         if any(annotation.get(k) is not None for k in ('largeur', 'hauteur')) and annotation.get('x') is None:
-            raise ValueError('Dimensions sans position')
+            raise ValueError(f'{where}: dimensions sans position')
         for pos, size in (('x','largeur'), ('y','hauteur')):
             if (annotation.get(pos) or 0) + (annotation.get(size) or 0) > 1:
-                raise ValueError('Annotation hors page')
-        string(annotation.get('type_annotation'), nullable=True)
+                raise ValueError(f'{where}: annotation hors page')
+        string(annotation.get('type_annotation'), where + '.type_annotation', nullable=True)
         conn.execute('''INSERT INTO annotation(correction_id,item_id,page,x,y,largeur,hauteur,texte,type_annotation)
-            VALUES(?,?,?,?,?,?,?,?,?)''', (cid, item_id(annotation, True), page, annotation.get('x'), annotation.get('y'), annotation.get('largeur'), annotation.get('hauteur'), string(annotation['texte']), annotation.get('type_annotation')))
+            VALUES(?,?,?,?,?,?,?,?,?)''', (cid, item_id(annotation, True), page, annotation.get('x'), annotation.get('y'), annotation.get('largeur'), annotation.get('hauteur'), string(annotation['texte'], where + '.texte'), annotation.get('type_annotation')))
     total, _ = compute_raw_score((e['points_obtenus'], items[e['item_code']]['bareme_max']) for e in entries)
     conn.execute('UPDATE correction SET note_brute=? WHERE id=?', (total, cid))
     # Any changed member may affect every peer's final score. Cached finals are invalidated.

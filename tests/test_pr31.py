@@ -88,6 +88,10 @@ class FastCalibrationWorkflowTests(unittest.TestCase):
         prompt = make_prompt(self.app, self.ident, 'calibrage')
         self.assertIn('"item_code": "E1Q1I1"', prompt)
         self.assertIn('jamais "code"', prompt)
+        self.assertIn('conseils : liste d\'OBJETS', prompt)
+        self.assertIn('annotations : liste d\'OBJETS', prompt)
+        self.assertIn('pages_ignorees : liste d\'OBJETS', prompt)
+        self.assertIn('a_verifier : liste de CHAÎNES', prompt)
 
         first = self.envelope({
             'pretraitement': {
@@ -106,6 +110,35 @@ class FastCalibrationWorkflowTests(unittest.TestCase):
         state = self.app.state(self.ident)
         self.assertTrue(state['copies'][0]['correction_id'])
 
+    def test_validation_error_contains_nested_json_path(self):
+        bareme = self.envelope({
+            'versions': [{'version': 'A'}],
+            'grilles': [{'nom': 'Barème', 'version': 'A', 'exercices': [
+                {'numero': '1', 'questions': [{'numero': '1', 'items': [
+                    {'code': 'E1Q1I1', 'description': 'Résoudre', 'bareme_max': 2},
+                ]}]}
+            ]}],
+        })
+        self.app.exchange(self.ident, 'bareme', json.dumps(bareme), True)
+        bad = self.envelope({
+            'pretraitement': {
+                'copies': [{'reference': 'C001', 'identite_lue': '1', 'version': 'A', 'pages': [1]}],
+                'pages_ignorees': [], 'absents': [],
+            },
+            'corriges': [{'version': 'A', 'corrige_latex': r'$x=2$.'}],
+            'corrections': [{
+                'reference': 'C001',
+                'items': [{'item_code': 'E1Q1I1', 'points_obtenus': 2}],
+                'annotations': [],
+                'conseils': ['Relire le calcul.'],
+                'commentaire_global': None,
+                'a_verifier': [],
+            }],
+            'a_revoir': [], 'moyenne_estimee': 10,
+        })
+        with self.assertRaisesRegex(ValueError, r'corrections\[0\]\.conseils\[0\]: objet attendu'):
+            self.app.exchange(self.ident, 'calibrage', json.dumps(bad), True)
+
     def test_prompts_match_fast_workflow(self):
         opening = make_prompt(self.app, self.ident, 'bareme')
         self.assertIn("Ne rends PAS le JSON", opening)
@@ -115,7 +148,7 @@ class FastCalibrationWorkflowTests(unittest.TestCase):
         self.app.exchange(self.ident, 'bareme', json.dumps(bareme), True)
         calibration = make_prompt(self.app, self.ident, 'calibrage')
         self.assertIn('identite_lue', calibration)
-        self.assertIn('numéro écrit par l’élève', calibration)
+        self.assertIn('numéro écrit par l', calibration)
 
 
 if __name__ == '__main__':

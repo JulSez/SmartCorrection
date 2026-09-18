@@ -208,6 +208,106 @@ Quand l'enseignant valide le barème dans la conversation, rends alors uniquemen
 """ + public_json(example)
 
 
+
+def _correction_json_contract():
+    return r"""
+CONTRAT JSON STRICT POUR UNE CORRECTION
+Respecte exactement ces types et ces noms de champs. N'ajoute aucun champ.
+
+corrections est une liste d'objets. Chaque objet correction :
+{
+  "reference": "C001",
+  "items": [
+    {
+      "item_code": "E1Q1I1",
+      "points_obtenus": 1,
+      "statut": "partiel",
+      "commentaire": "Erreur de signe.",
+      "annotation": null
+    }
+  ],
+  "annotations": [
+    {
+      "item_code": "E1Q1I1",
+      "page": 2,
+      "texte": "Erreur ici.",
+      "x": 0.42,
+      "y": 0.31,
+      "largeur": 0.18,
+      "hauteur": 0.05,
+      "type_annotation": "erreur"
+    }
+  ],
+  "conseils": [
+    {
+      "texte": "Vérifier les signes avant de conclure.",
+      "item_code": "E1Q1I1",
+      "priorite": 1
+    }
+  ],
+  "commentaire_global": "Ensemble correct mais calculs fragiles.",
+  "a_verifier": ["Lecture du signe en page 2 à confirmer."]
+}
+
+Règles impératives :
+- items : un objet par item du barème, exactement une fois. Utilise "item_code", jamais "code".
+- points_obtenus : nombre JSON, jamais null, compris entre 0 et le maximum de l'item.
+- statut : facultatif ; null ou exactement "acquis", "partiel", "non_acquis", "non_repondu".
+- commentaire et annotation dans items : chaîne ou null. Si tous les points ne sont pas attribués, explique la perte de points dans commentaire ou annotation.
+- annotations : liste d'OBJETS, jamais une liste de textes. Chaque objet exige item_code, page et texte. x, y, largeur, hauteur sont facultatifs ; s'ils sont fournis, ce sont des nombres entre 0 et 1. type_annotation est facultatif.
+- conseils : liste d'OBJETS, jamais une liste de textes. Chaque objet exige texte ; item_code et priorite sont facultatifs. priorite, si présente, est un entier >= 1.
+- commentaire_global : chaîne ou null.
+- a_verifier : liste de CHAÎNES courtes, jamais une liste d'objets. Utilise-la seulement pour une incertitude non bloquante à relire par le professeur.
+- a_revoir : liste d'objets {"reference":"C001","motif":"..."} pour une copie impossible à corriger complètement sans deviner. Ne mets alors pas cette copie dans corrections.
+"""
+
+def _preprocessing_json_contract():
+    return r"""
+CONTRAT JSON STRICT DU PRÉTRAITEMENT
+pretraitement est un objet :
+{
+  "copies": [
+    {
+      "reference": "C001",
+      "identite_lue": "17",
+      "numero": null,
+      "version": "A",
+      "pages": [1, 2]
+    }
+  ],
+  "pages_ignorees": [
+    {"page": 3, "motif": "page blanche"}
+  ],
+  "absents": []
+}
+
+Règles impératives :
+- reference : chaîne C001, C002, etc., unique.
+- identite_lue : chaîne contenant exactement ce qui est lisible sur la copie (numéro écrit par l'élève, ou nom/prénom), ou null. N'invente rien.
+- numero : toujours null dans la réponse IA ; l'association à la liste locale est faite ensuite par SmartCorrection et peut être corrigée par le professeur.
+- version : chaîne correspondant à une version du sujet.
+- pages : liste non vide d'entiers, dans l'ordre du paquet.
+- pages_ignorees : liste d'OBJETS {"page": entier, "motif": chaîne}, jamais une liste de numéros ni de textes.
+- absents : toujours [] ; l'IA ne déduit pas les absences.
+"""
+
+def _corriges_json_contract():
+    return r"""
+CONTRAT JSON STRICT DES CORRIGÉS
+corriges est une liste d'objets :
+[
+  {
+    "version": "A",
+    "corrige_latex": "\\section*{Exercice 1} ...",
+    "sujet_latex": "\\textit{Sujet joint en PDF.}"
+  }
+]
+Règles impératives :
+- version et corrige_latex sont obligatoires.
+- sujet_latex est facultatif.
+- corrige_latex contient seulement le corps LaTeX : pas de documentclass, begin{document} ni end{document}.
+"""
+
 def _calibration_prompt(app, ident):
     prefix, state = prompts._prefix(app, ident)
     d = state["dossier"]
@@ -228,13 +328,59 @@ def _calibration_prompt(app, ident):
                              "notations imprécises, oublis de justification et défauts de rédaction, sans inventer d'erreur ni viser artificiellement une moyenne.")
         except ValueError:
             pass
-    first_fields = """
-Pour ce PREMIER lot seulement, le même JSON doit aussi contenir :
-- pretraitement : inventaire COMPLET de toutes les copies du paquet, pages, versions et pages ignorées. Pour chaque copie : reference, identite_lue, numero (toujours null), version, pages. Dans identite_lue, recopie l’identité effectivement visible sur la copie : numéro écrit par l’élève si présent, sinon nom/prénom lisible ; null si rien n’est lisible. N’invente jamais une identité ;
-- corriges : tous les corrigés de référence, adaptés au format de sortie déjà choisi.
-""" if first else """
+    first_fields = ("""
+Pour ce PREMIER lot seulement, le même JSON doit aussi contenir le prétraitement COMPLET du paquet et TOUS les corrigés de référence.
+""" + _preprocessing_json_contract() + _corriges_json_contract()) if first else """
 Le prétraitement et les corrigés sont déjà enregistrés : ne les répète pas sauf si l'enseignant t'a explicitement demandé de les corriger.
 """
+    example_ref = selected[0] if selected else "C001"
+    example = {
+        "dossier": ident,
+        "revision": d["revision"],
+        "corrections": [{
+            "reference": example_ref,
+            "items": [{
+                "item_code": "E1Q1I1",
+                "points_obtenus": 1,
+                "statut": "partiel",
+                "commentaire": "Erreur de signe.",
+                "annotation": None,
+            }],
+            "annotations": [{
+                "item_code": "E1Q1I1",
+                "page": 1,
+                "texte": "Erreur ici.",
+                "x": None, "y": None, "largeur": None, "hauteur": None,
+                "type_annotation": None,
+            }],
+            "conseils": [{
+                "texte": "Vérifier les signes.",
+                "item_code": "E1Q1I1",
+                "priorite": 1,
+            }],
+            "commentaire_global": "Calcul à sécuriser.",
+            "a_verifier": [],
+        }],
+        "a_revoir": [],
+        "moyenne_estimee": 12.5,
+    }
+    if first:
+        example["pretraitement"] = {
+            "copies": [{
+                "reference": "C001",
+                "identite_lue": "17",
+                "numero": None,
+                "version": "A",
+                "pages": [1, 2],
+            }],
+            "pages_ignorees": [{"page": 3, "motif": "page blanche"}],
+            "absents": [],
+        }
+        example["corriges"] = [{
+            "version": "A",
+            "corrige_latex": r"\section*{Exercice 1} ...",
+            "sujet_latex": r"\textit{Sujet joint en PDF.}",
+        }]
     return prefix + f"""
 CALIBRAGE DE LA CORRECTION — même écran, boucle par lots.
 Corrige exactement ce lot : {target}.
@@ -246,17 +392,15 @@ Applique le barème validé et toutes les décisions pédagogiques suivantes, ac
 {vigilance}
 Donne aussi moyenne_estimee, ton estimation actuelle de la moyenne finale de la classe sur 20. Cette estimation est un signal de vigilance, jamais une cible : ne durcis ni n'assouplis artificiellement pour atteindre une moyenne.
 
-Rends uniquement UN JSON complet :
-{{
-  "dossier": "{ident}",
-  "revision": {d["revision"]},
-  "pretraitement": {{"copies": [{{"reference": "C001", "identite_lue": "17 ou Alice DUPONT", "numero": null, "version": "A", "pages": [1, 2]}}], "pages_ignorees": [], "absents": []}},
-  "corriges": [{{"version": "A", "corrige_latex": "..."}}, ...],
-  "corrections": [{{"reference": "C001", "items": [{{"item_code": "E1Q1I1", "points_obtenus": 1, "commentaire": "..."}}], "annotations": [], "conseils": [], "commentaire_global": null, "a_verifier": []}}, ...],
-  "a_revoir": [],
-  "moyenne_estimee": 12.5
-}}
-Dans corrections → items, utilise toujours la clé "item_code" (jamais "code") pour référencer un item du barème, par exemple "item_code": "E1Q1I1".\nLes champs pretraitement et corriges sont obligatoires au premier lot et facultatifs ensuite.\n"""
+{_correction_json_contract()}
+
+ENVELOPPE FINALE À RENDRE
+Rends uniquement UN bloc JSON complet, sans commentaire autour.
+Voici un EXEMPLE STRUCTUREL VALIDE pour ce lot ; remplace les valeurs par celles réellement lues/corrigées :
+{public_json(example)}
+{"Au premier lot, pretraitement et corriges sont obligatoires et doivent être complets." if first else "Pour ce lot, n'ajoute PAS pretraitement ni corriges : ils sont déjà enregistrés."}
+Ne remplace jamais une structure inconnue par une supposition : le présent contrat décrit tous les champs autorisés.
+"""
 
 
 def _make_prompt(app, ident, stage, version=None, mode="echantillon"):
@@ -270,6 +414,7 @@ def _make_prompt(app, ident, stage, version=None, mode="echantillon"):
         returns = (state.get("calibrage") or {}).get("retours")
         if returns:
             base += "\n\nDÉCISIONS FIGÉES PENDANT LE CALIBRAGE — applique-les à toutes les copies restantes :\n" + returns
+        base += "\n\n" + _correction_json_contract()
         return base
     return _BASE_PROMPT(app, ident, stage, version, mode)
 

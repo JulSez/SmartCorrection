@@ -403,35 +403,49 @@ class Application:
         self._envelope(data,dossier,{'corrections','a_revoir'},{'corrections'})
         copies={c['reference']:c for c in self._copies(conn,dossier)}
         seen=set();summary=[]
-        for correction in array(data['corrections'],'corrections'):
-            object_fields(correction,{'reference','items','annotations','conseils','commentaire_global','a_verifier'},{'reference','items'})
-            ref=string(correction['reference'])
+        for correction_index, correction in enumerate(array(data['corrections'],'corrections')):
+            where=f'corrections[{correction_index}]'
+            object_fields(correction,{'reference','items','annotations','conseils','commentaire_global','a_verifier'},{'reference','items'},where)
+            ref=string(correction['reference'],where+'.reference')
             if ref in seen or ref not in copies:
-                raise ValueError(f'Copie répétée ou inconnue : {ref}')
+                raise ValueError(f'{where}.reference : copie répétée ou inconnue : {ref}')
             seen.add(ref);copy=copies[ref]
             if not dossier['echantillon_valide'] and not copy['echantillon']:
-                raise ValueError('Valider l’échantillon avant de corriger le reste')
+                raise ValueError(f'{where} : valider l’échantillon avant de corriger le reste')
             if not conn.execute('SELECT 1 FROM corrige WHERE version_id=?',(copy['version_id'],)).fetchone():
-                raise ValueError(f'Enregistrer le corrigé de la version {copy["version"]} avant cette correction')
+                raise ValueError(f'{where} : enregistrer le corrigé de la version {copy["version"]} avant cette correction')
             grid_id=compatible_grid(conn,copy)
             maxima={r['code']:r['bareme_max'] for r in conn.execute('SELECT * FROM item WHERE grille_id=?',(grid_id,))}
-            for item in array(correction['items'],'items',True):
-                if not isinstance(item,dict):
-                    raise ValueError('Chaque item doit être un objet')
-                code=string(item.get('item_code'),'item_code')
+            for item_index,item in enumerate(array(correction['items'],where+'.items',True)):
+                item_where=f'{where}.items[{item_index}]'
+                object_fields(item,{'item_code','points_obtenus','statut','annotation','commentaire'},{'item_code','points_obtenus'},item_where)
+                code=string(item.get('item_code'),item_where+'.item_code')
                 if code not in maxima:
-                    raise ValueError(f'Item inconnu : {code}')
-                points=number(item.get('points_obtenus'),'points obtenus')
+                    raise ValueError(f'{item_where}.item_code : item inconnu : {code}')
+                points=number(item.get('points_obtenus'),item_where+'.points_obtenus')
                 if points<maxima[code] and not (item.get('commentaire') or item.get('annotation')):
-                    raise ValueError(f'{ref} / {code} : expliquer les points non attribués')
-            for annotation in array(correction.get('annotations',[]),'annotations'):
-                if not isinstance(annotation,dict) or annotation.get('page') not in copy['pages']:
-                    raise ValueError(f'{ref} : annotation sur une page extérieure à la copie')
-            checks=[string(x,'élément à vérifier').strip() for x in array(correction.get('a_verifier',[]),'a_verifier')]
+                    raise ValueError(f'{item_where} : expliquer les points non attribués')
+            for annotation_index,annotation in enumerate(array(correction.get('annotations',[]),where+'.annotations')):
+                annotation_where=f'{where}.annotations[{annotation_index}]'
+                if not isinstance(annotation,dict):
+                    raise ValueError(f'{annotation_where}: objet attendu')
+                if annotation.get('page') not in copy['pages']:
+                    raise ValueError(f'{annotation_where}.page : page extérieure à la copie')
+            checks=[]
+            for check_index,value in enumerate(array(correction.get('a_verifier',[]),where+'.a_verifier')):
+                checks.append(string(value,f'{where}.a_verifier[{check_index}]').strip())
             checks=[x for x in checks if x]
             payload={k:v for k,v in correction.items() if k not in {'reference','a_verifier'}}
             payload.update(copie_id=copy['copie_id'],grille_id=grid_id)
-            cid=import_correction(payload,conn,replace=True)
+            try:
+                cid=import_correction(payload,conn,replace=True)
+            except ValueError as exc:
+                message=str(exc)
+                if message.startswith('correction.'):
+                    message=where+'.'+message[len('correction.'):]
+                elif not message.startswith(where):
+                    message=where+' : '+message
+                raise ValueError(message) from exc
             conn.execute('DELETE FROM ui_verification WHERE copie_id=?',(copy['copie_id'],))
             for order,text in enumerate(checks,1):
                 conn.execute('INSERT INTO ui_verification(copie_id,ordre,texte) VALUES(?,?,?)',(copy['copie_id'],order,text))
@@ -439,15 +453,16 @@ class Application:
             score=conn.execute('SELECT note_brute FROM correction WHERE id=?',(cid,)).fetchone()[0]
             summary.append({'reference':ref,'note_brute':score,'bareme':sum(maxima.values()),'remplacement':bool(copy['correction_id'])})
         pending=[]
-        for entry in array(data.get('a_revoir',[]),'a_revoir'):
-            object_fields(entry,{'reference','motif'},{'reference','motif'})
-            ref=string(entry['reference'])
+        for pending_index,entry in enumerate(array(data.get('a_revoir',[]),'a_revoir')):
+            where=f'a_revoir[{pending_index}]'
+            object_fields(entry,{'reference','motif'},{'reference','motif'},where)
+            ref=string(entry['reference'],where+'.reference')
             if ref not in copies or ref in seen or copies[ref]['statut']!='present':
                 raise ValueError('Copie à revoir inconnue ou répétée')
             if not dossier['echantillon_valide'] and not copies[ref]['echantillon']:
                 raise ValueError('Cette copie ne fait pas partie de l’échantillon')
             seen.add(ref)
-            conn.execute('UPDATE ui_copie SET a_revoir=? WHERE dossier_id=? AND reference=?',(string(entry['motif']),dossier['id'],ref))
+            conn.execute('UPDATE ui_copie SET a_revoir=? WHERE dossier_id=? AND reference=?',(string(entry['motif'],where+'.motif'),dossier['id'],ref))
             pending.append(entry)
         if not seen:
             raise ValueError('La réponse ne contient aucune copie')
