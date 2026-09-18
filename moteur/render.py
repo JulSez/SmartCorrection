@@ -179,40 +179,22 @@ def render_student(student, subject, cfg):
         lines += [r'{\scriptsize Individuelle /' + fmt(cfg.note_individuelle_max) + ' : ' + score(student.get('note_individuelle'))
                   + r' \textbullet{} Groupe /' + fmt(cfg.note_groupe_max) + ' : ' + esc(group_value)
                   + r' \textbullet{} Finale /' + fmt(cfg.note_finale_max) + ' : ' + final_value + r'}\par']
-    lines += [r'{\color{SCblue}\hrule height .7pt}\vspace{1mm}', r'\section*{Correction}']
+    lines += [r'{\color{SCblue}\hrule height .7pt}\vspace{1mm}']
 
     if student.get('statut') == 'absent':
         lines += [r'\textbf{Absence déclarée.}']
     else:
-        if student.get('commentaire_global'):
-            lines += [esc(student['commentaire_global'])]
-        feedback = []
-        for item in student.get('items', []):
-            texts = [item.get('commentaire'), item.get('annotation')]
-            texts = [x for x in texts if x]
-            if texts:
-                feedback.append(r'\item \textbf{' + esc('Ex. '+str(item.get('exercice','?'))+' — Q. '+str(item.get('question','?'))) + '} — ' + esc(' '.join(texts)))
-        for annotation in student.get('annotations', []):
-            if annotation.get('texte'):
-                page = annotation.get('page')
-                prefix = ('Page '+str(page)+' — ') if page is not None else ''
-                feedback.append(r'\item ' + esc(prefix + annotation['texte']))
-        if feedback:
-            lines += [r'\begin{itemize}\setlength{\itemsep}{1pt}\setlength{\parskip}{0pt}'] + feedback + [r'\end{itemize}']
-
-        if _CORRECTION_PAGE_BREAK.get():
-            lines += [r'\newpage']
-        lines += [r'\section*{Conseils}']
-        if student.get('conseils'):
-            advice = [r'\item '+esc(a['texte']) for a in student['conseils'] if a.get('texte')]
-            if advice:
-                lines += [r'\begin{itemize}\setlength{\itemsep}{1pt}\setlength{\parskip}{0pt}'] + advice + [r'\end{itemize}']
-
         lines += [r'\section*{Grille}',
-                  r'\renewcommand{\arraystretch}{1.14}',
-                  r'\setlength{\LTpre}{0pt}\setlength{\LTpost}{3pt}',
+                  r'\renewcommand{\arraystretch}{1.10}',
+                  r'\setlength{\LTpre}{0pt}\setlength{\LTpost}{2pt}',
                   r'\begin{longtable}{@{}>{\raggedright\arraybackslash}p{.20\linewidth}>{\raggedright\arraybackslash}p{.58\linewidth}>{\centering\arraybackslash}p{.18\linewidth}@{}}',
-                  r'\small\textcolor{SCblue}{\textbf{Question}} & \small\textcolor{SCblue}{\textbf{Critère}} & \small\textcolor{SCblue}{\textbf{Note}}\\\noalign{\hrule height .8pt}\endhead']
+                  r'\small\textcolor{SCblue}{\textbf{Question}} & \small\textcolor{SCblue}{\textbf{Critère / erreur}} & \small\textcolor{SCblue}{\textbf{Note}}\\\noalign{\hrule height .8pt}\endhead']
+        annotations_by_item = {}
+        for annotation in student.get('annotations', []):
+            code = annotation.get('item_code')
+            text = str(annotation.get('texte') or '').strip()
+            if code and text:
+                annotations_by_item.setdefault(code, []).append(text)
         previous_ex = previous_q = None
         for index, item in enumerate(student.get('items', [])):
             ex, q = str(item.get('exercice','?')), str(item.get('question','?'))
@@ -224,9 +206,24 @@ def render_student(student, subject, cfg):
                 else:
                     lines.append(r'\multicolumn{3}{@{}l@{}}{\makebox[\linewidth]{\color{black!32}\dotfill}}\\[-4pt]')
             question = esc('Ex. '+ex) + r'\newline ' + esc('Q. '+q)
-            lines.append(question+' & '+esc(item.get('description') or '')+' & '+fmt(item.get('points_obtenus'))+'/'+fmt(item.get('bareme_max'))+r'\\')
+            criterion = esc(item.get('description') or '')
+            errors = []
+            for value in (item.get('commentaire'), item.get('annotation')):
+                if value and str(value).strip():
+                    errors.append(str(value).strip())
+            errors.extend(annotations_by_item.get(item.get('code'), []))
+            if errors:
+                criterion += r'\newline {\scriptsize\textit{' + esc(' ; '.join(dict.fromkeys(errors))) + '}}'
+            lines.append(question+' & '+criterion+' & '+fmt(item.get('points_obtenus'))+'/'+fmt(item.get('bareme_max'))+r'\\')
             previous_ex, previous_q = ex, q
         lines += [r'\hline', r'\end{longtable}']
+
+        if student.get('commentaire_global'):
+            lines += [r'{\scriptsize ' + esc(student['commentaire_global']) + r'}\par']
+        if student.get('conseils'):
+            advice = [esc(a['texte']) for a in student['conseils'] if a.get('texte')]
+            if advice:
+                lines += [r'\section*{Conseil}', r'{\scriptsize ' + r' \textbullet{} '.join(advice) + r'}\par']
 
         checks = [str(x).strip() for x in student.get('a_verifier', []) if str(x).strip()]
         if checks:

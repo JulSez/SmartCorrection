@@ -88,10 +88,14 @@ class FastCalibrationWorkflowTests(unittest.TestCase):
         prompt = make_prompt(self.app, self.ident, 'calibrage')
         self.assertIn('"item_code": "E1Q1I1"', prompt)
         self.assertIn('jamais "code"', prompt)
-        self.assertIn('conseils : liste d\'OBJETS', prompt)
-        self.assertIn('annotations : liste d\'OBJETS', prompt)
+        self.assertIn('conseils : [] par défaut', prompt)
+        self.assertIn('annotations : [] par défaut', prompt)
         self.assertIn('pages_ignorees : liste d\'OBJETS', prompt)
         self.assertIn('a_verifier : liste de CHAÎNES', prompt)
+        self.assertIn('1 à 3 items maximum par question', make_prompt(self.app, self.ident, 'bareme'))
+        self.assertIn('La feuille élève affiche directement l\'erreur dans la grille', prompt)
+        self.assertIn('conseils : [] par défaut', prompt)
+        self.assertIn('une erreur = quelques mots', prompt)
 
         first = self.envelope({
             'pretraitement': {

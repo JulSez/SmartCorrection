@@ -202,7 +202,9 @@ def _bareme_prompt(app, ident):
     }
     return prefix + """
 OBJECTIF — construire le barème avec l'enseignant.
-Analyse le sujet, les savoir-faire, les documents de référence et les copies jointes. Propose d'abord un barème argumenté et discute-le normalement avec l'enseignant. Ne rends PAS le JSON tant que l'enseignant n'a pas indiqué que le barème lui convient.
+Analyse le sujet, les savoir-faire, les documents de référence et les copies jointes. Propose d'abord un barème compact et discute-le normalement avec l'enseignant. Ne rends PAS le JSON tant que l'enseignant n'a pas indiqué que le barème lui convient.
+PAR DÉFAUT, fais simple : 1 à 3 items maximum par question. Regroupe les micro-critères qui évaluent la même idée. Chaque description doit être courte, concrète et compréhensible par un élève (quelques mots, pas une phrase de correction). Le but est qu'une grille A6 reste immédiatement lisible.
+Ne multiplie les items ou les explications que si l'enseignant le demande explicitement. Mieux vaut une première proposition trop compacte que trop détaillée.
 Pendant la discussion, tiens compte explicitement de ses décisions sur la sévérité, les erreurs de calcul, la rédaction, les équivalences, les symboles et les pénalités.
 Quand l'enseignant valide le barème dans la conversation, rends alors uniquement un bloc JSON complet, sans texte autour, avec cette structure :
 """ + public_json(example)
@@ -211,10 +213,11 @@ Quand l'enseignant valide le barème dans la conversation, rends alors uniquemen
 
 def _correction_json_contract():
     return r"""
-CONTRAT JSON STRICT POUR UNE CORRECTION
-Respecte exactement ces types et ces noms de champs. N'ajoute aucun champ.
+CONTRAT JSON STRICT — CORRECTION COMPACTE
+La feuille élève affiche directement l'erreur dans la grille : il n'y a PAS une section "Correction" séparée.
+Objectif prioritaire : une lecture rapide. Sois court. Le professeur demandera plus de détail si nécessaire.
 
-corrections est une liste d'objets. Chaque objet correction :
+corrections est une liste d'objets. Chaque correction :
 {
   "reference": "C001",
   "items": [
@@ -226,39 +229,31 @@ corrections est une liste d'objets. Chaque objet correction :
       "annotation": null
     }
   ],
-  "annotations": [
-    {
-      "item_code": "E1Q1I1",
-      "page": 2,
-      "texte": "Erreur ici.",
-      "x": 0.42,
-      "y": 0.31,
-      "largeur": 0.18,
-      "hauteur": 0.05,
-      "type_annotation": "erreur"
-    }
-  ],
-  "conseils": [
-    {
-      "texte": "Vérifier les signes avant de conclure.",
-      "item_code": "E1Q1I1",
-      "priorite": 1
-    }
-  ],
-  "commentaire_global": "Ensemble correct mais calculs fragiles.",
-  "a_verifier": ["Lecture du signe en page 2 à confirmer."]
+  "annotations": [],
+  "conseils": [],
+  "commentaire_global": null,
+  "a_verifier": []
 }
 
 Règles impératives :
 - items : un objet par item du barème, exactement une fois. Utilise "item_code", jamais "code".
-- points_obtenus : nombre JSON, jamais null, compris entre 0 et le maximum de l'item.
-- statut : facultatif ; null ou exactement "acquis", "partiel", "non_acquis", "non_repondu".
-- commentaire et annotation dans items : chaîne ou null. Si tous les points ne sont pas attribués, explique la perte de points dans commentaire ou annotation.
-- annotations : liste d'OBJETS, jamais une liste de textes. Chaque objet exige item_code, page et texte. x, y, largeur, hauteur sont facultatifs ; s'ils sont fournis, ce sont des nombres entre 0 et 1. type_annotation est facultatif.
-- conseils : liste d'OBJETS, jamais une liste de textes. Chaque objet exige texte ; item_code et priorite sont facultatifs. priorite, si présente, est un entier >= 1.
-- commentaire_global : chaîne ou null.
-- a_verifier : liste de CHAÎNES courtes, jamais une liste d'objets. Utilise-la seulement pour une incertitude non bloquante à relire par le professeur.
-- a_revoir : liste d'objets {"reference":"C001","motif":"..."} pour une copie impossible à corriger complètement sans deviner. Ne mets alors pas cette copie dans corrections.
+- points_obtenus : nombre JSON, jamais null, entre 0 et le maximum.
+- statut : facultatif ; null ou "acquis", "partiel", "non_acquis", "non_repondu".
+- commentaire : PAR DÉFAUT null si tous les points sont obtenus. Si des points sont perdus, indique seulement l'erreur de l'élève, de la manière la plus directe possible : "Erreur de signe.", "Équivalent manquant.", "Calcul faux.", "Conclusion absente.". Pas d'explication de cours, pas de reformulation longue, pas de formule de politesse.
+- annotation dans items : facultative ; même exigence de brièveté que commentaire. N'utilise pas commentaire ET annotation pour dire la même chose.
+- annotations : [] par défaut. N'ajoute un objet localisé que si la localisation sur la copie apporte réellement quelque chose. Objet : {"item_code":"E1Q1I1","page":2,"texte":"Signe faux.","x":null,"y":null,"largeur":null,"hauteur":null,"type_annotation":null}.
+- conseils : [] par défaut. N'ajoute qu'un conseil très court si cela apporte une information différente de l'erreur déjà écrite dans la grille. Évite de répéter "attention", "pense à", ou le critère. Maximum recommandé : 1 conseil par copie.
+- commentaire_global : null par défaut. Utilise une seule courte phrase seulement si elle apporte une synthèse indispensable non visible dans la grille.
+- a_verifier : liste de CHAÎNES très courtes réservée aux incertitudes de lecture du professeur ; [] si aucune.
+- a_revoir : liste d'objets {"reference":"C001","motif":"..."} seulement si la copie ne peut pas être corrigée sans deviner.
+
+STYLE ÉLÈVE :
+- la grille elle-même porte la correction ;
+- ne répète jamais le critère dans le commentaire ;
+- ne raconte pas la démarche de l'élève ;
+- ne donne pas une mini-correction rédigée dans chaque item ;
+- une erreur = quelques mots ;
+- privilégie le vide à un texte inutile.
 """
 
 def _preprocessing_json_contract():
@@ -346,19 +341,9 @@ Le prétraitement et les corrigés sont déjà enregistrés : ne les répète pa
                 "commentaire": "Erreur de signe.",
                 "annotation": None,
             }],
-            "annotations": [{
-                "item_code": "E1Q1I1",
-                "page": 1,
-                "texte": "Erreur ici.",
-                "x": None, "y": None, "largeur": None, "hauteur": None,
-                "type_annotation": None,
-            }],
-            "conseils": [{
-                "texte": "Vérifier les signes.",
-                "item_code": "E1Q1I1",
-                "priorite": 1,
-            }],
-            "commentaire_global": "Calcul à sécuriser.",
+            "annotations": [],
+            "conseils": [],
+            "commentaire_global": None,
             "a_verifier": [],
         }],
         "a_revoir": [],
@@ -385,7 +370,8 @@ Le prétraitement et les corrigés sont déjà enregistrés : ne les répète pa
 CALIBRAGE DE LA CORRECTION — même écran, boucle par lots.
 Corrige exactement ce lot : {target}.
 {first_fields}
-Applique le barème validé et toutes les décisions pédagogiques suivantes, accumulées pendant le calibrage :
+Applique le barème validé et toutes les décisions pédagogiques suivantes, accumulées pendant le calibrage.
+La sortie destinée à l'élève doit rester COMPACTE : la grille contient déjà les critères ; le commentaire sert uniquement à nommer directement l'erreur. Ne duplique pas la correction dans plusieurs champs.
 --- DÉCISIONS DE L'ENSEIGNANT ---
 {returns}
 --- FIN DES DÉCISIONS ---
