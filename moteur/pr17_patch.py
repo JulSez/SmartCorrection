@@ -32,9 +32,12 @@ def compact_corrige_source(student, subject, cfg):
         r'\def\SCpanel{Corrigé}\setcounter{page}{1}',
         r'{\bfseries\color{SCblue} Corrigé}\par\vspace{2mm}',
     ])
-    if old not in source:
-        raise RuntimeError('En-tête du corrigé introuvable dans le rendu')
-    return source.replace(old, new, 1)
+    if old in source:
+        return source.replace(old, new, 1)
+    # Newer renderers already emit the compact Corrigé heading.
+    if r'{\\bfseries\\color{SCblue} Corrigé}' in source:
+        return source
+    raise RuntimeError('En-tête du corrigé introuvable dans le rendu')
 
 
 @contextmanager
