@@ -21,23 +21,17 @@ _BASE_GENERATE = WorkflowApplication.generate
 def compact_corrige_source(student, subject, cfg):
     """Keep the correction sheet unchanged and leave only the Corrigé label on the answer panel."""
     source = _BASE_RENDER_STUDENT(student, subject, cfg)
-    esc = render_module.latex_escape_plain_text
-    old = '\n'.join([
-        r'\def\SCpanel{Corrigé}\setcounter{page}{1}',
-        r'\SCtitle{Corrigé}',
-        r'{\bfseries ' + esc(subject.get('titre') or 'Évaluation') + r'}\par',
-        r'\textbf{Version :} ' + esc(student.get('version') or '?') + r'\hfill\textbf{Classe :} ' + esc(subject.get('classe') or '') + r'\par\vspace{2mm}',
-    ])
-    new = '\n'.join([
-        r'\def\SCpanel{Corrigé}\setcounter{page}{1}',
-        r'{\bfseries\color{SCblue} Corrigé}\par\vspace{2mm}',
-    ])
-    if old in source:
-        return source.replace(old, new, 1)
-    # Newer renderers already emit the compact Corrigé heading.
-    if r'{\\bfseries\\color{SCblue} Corrigé}' in source:
+    marker = r'\def\SCpanel{Corrigé}\setcounter{page}{1}'
+    compact = marker + '\n' + r'{\bfseries\color{SCblue} Corrigé}\par\vspace{2mm}'
+    if compact in source:
         return source
-    raise RuntimeError('En-tête du corrigé introuvable dans le rendu')
+    start = source.find(marker)
+    if start == -1:
+        raise RuntimeError('En-tête du corrigé introuvable dans le rendu')
+    body = source.find(student.get('corrige_latex') or 'Aucun corrigé enregistré pour cette version.', start)
+    if body == -1:
+        raise RuntimeError('Corps du corrigé introuvable dans le rendu')
+    return source[:start] + compact + '\n' + source[body:]
 
 
 @contextmanager
