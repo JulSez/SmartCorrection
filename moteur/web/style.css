@@ -6,3 +6,6 @@
 .pane-head p{font-size:14px}
 .copy-help{flex-basis:100%;margin:0;font-size:14px}
 .more-options{margin-top:18px}.more-options>button{margin-top:12px}
+
+/* Copy-to-student search: local autocomplete in setup step 1. */
+.student-search{position:relative;min-width:250px}.student-current{display:flex;align-items:center;gap:6px;margin-bottom:6px}.student-current strong{font-size:12px}.clear-student{padding:1px 7px;border:0;background:transparent;font-size:16px}.student-search .copy-student-search{max-width:none;width:100%}.student-suggestions{position:absolute;z-index:20;left:0;right:0;top:100%;margin-top:3px;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 10px 28px #18362f1f;max-height:240px;overflow:auto;padding:4px}.student-suggestion{display:block;width:100%;text-align:left;border:0;border-radius:5px;padding:8px 10px;font-size:12px;font-weight:500}.student-suggestions .help{padding:8px 10px;margin:0}

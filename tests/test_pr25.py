@@ -33,6 +33,7 @@ class FlexibleCopyIdentityTests(unittest.TestCase):
         state = self.app.state(self.ident)
         self.assertIsNone(state['pretraitement']['copies'][0].get('nom'))
         self.assertEqual(len(state['eleves']), 2)
+        self.assertEqual([s['numero'] for s in state['eleves']], [1, 2])
 
     def test_teacher_can_assign_or_leave_copy_unassigned(self):
         self.app.save_anonymity(self.ident, False)
@@ -53,7 +54,9 @@ class FlexibleCopyIdentityTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         source = (root/'moteur'/'web'/'hotfix-pr20.js').read_text(encoding='utf-8')
         self.assertIn('Affectation locale des élèves', source)
-        self.assertIn('— Non attribuée —', source)
+        self.assertIn('N° ou nom de l’élève', source)
+        self.assertIn('normalizeStudentSearch', source)
+        self.assertIn('part.startsWith(q)', source)
         self.assertIn('Une copie peut rester sans élève', source)
         self.assertIn('@affectation:', source)
 
