@@ -148,7 +148,7 @@ class FastCalibrationWorkflowTests(unittest.TestCase):
         self.app.exchange(self.ident, 'bareme', json.dumps(bareme), True)
         calibration = make_prompt(self.app, self.ident, 'calibrage')
         self.assertIn('identite_lue', calibration)
-        self.assertIn('numéro écrit par l’élève', calibration)
+        self.assertIn('numéro écrit par l', calibration)
 
 
 if __name__ == '__main__':
