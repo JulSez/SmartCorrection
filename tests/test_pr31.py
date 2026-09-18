@@ -42,7 +42,8 @@ class FastCalibrationWorkflowTests(unittest.TestCase):
 
         first = self.envelope({
             'pretraitement': {
-                'copies': [{'reference': f'C{i:03d}', 'numero': None, 'version': 'A', 'pages': [i]} for i in range(1, 7)],
+                # numero is deliberately omitted: the AI should not need to know the local roster id.
+                'copies': [{'reference': f'C{i:03d}', 'version': 'A', 'pages': [i]} for i in range(1, 7)],
                 'pages_ignorees': [], 'absents': [],
             },
             'corriges': [{'version': 'A', 'corrige_latex': r'\section*{Exercice 1} $x=2$.'}],
