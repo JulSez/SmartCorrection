@@ -10,7 +10,11 @@ function fastExchange(stage,buttonLabel){
  return `<div class="split"><section class="pane"><div class="pane-head"><h2 class="exchange-title">Consigne à copier dans l’IA</h2></div><div class="pane-body"><textarea id="fast-prompt" readonly placeholder="Chargement…"></textarea></div><div class="pane-foot actions"><button class="primary" id="fast-copy" disabled>Copier</button></div></section><section class="pane"><div class="pane-head"><h2 class="exchange-title">JSON de l’IA</h2></div><div class="pane-body"><textarea id="fast-response" data-stage="${stage}" placeholder="Collez ici le bloc JSON final de l’IA."></textarea></div><div class="pane-foot"><div class="actions"><button class="primary" id="fast-submit">${buttonLabel}</button></div><div id="fast-error" role="alert"></div></div></section></div>`;
 }
 function bindFastPrompt(stage,mode='echantillon'){
- loadPrompt(stage,'#fast-prompt','#fast-copy',mode);
+ if(mode==='echantillon'){loadPrompt(stage,'#fast-prompt','#fast-copy');return;}
+ const area=$('#fast-prompt'),button=$('#fast-copy');area.value='';button.disabled=true;
+ get('/api/prompt?id='+encodeURIComponent(state.dossier.id)+'&etape='+encodeURIComponent(stage)+'&mode='+encodeURIComponent(mode)).then(r=>{
+   area.value=r.texte;button.disabled=false;button.onclick=()=>copyText(area.value);
+ }).catch(e=>{area.placeholder='Consigne indisponible : '+e.message;button.textContent='Réessayer';button.disabled=false;button.onclick=()=>bindFastPrompt(stage,mode);});
 }
 async function fastExchangeCommit(stage){
  const text=$('#fast-response').value.trim();
