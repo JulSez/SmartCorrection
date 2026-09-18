@@ -40,7 +40,7 @@ class IndividualModeTests(unittest.TestCase):
             'corrige_latex': None,
         }
         tex = render_student(student, {'classe': '1GSpé', 'titre': 'Évaluation'}, self.cfg)
-        self.assertIn('Note (/20)', tex)
+        self.assertIn(r'\\textbf{Note :} 13,5/20', tex)
         self.assertNotIn('Note groupe', tex)
         self.assertNotIn('Aucun camarade', tex)
 
