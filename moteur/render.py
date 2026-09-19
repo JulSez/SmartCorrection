@@ -105,6 +105,19 @@ def fmt(value):
     return 'ABS' if value is None else format(value, '.10g').replace('.', ',')
 
 
+def _sum_scores(values):
+    """Sum numeric scores; preserve blank preview placeholders as blank."""
+    total = 0.0
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            total += float(value)
+            continue
+        return value
+    return total
+
+
 def build_student_data(conn, result, row):
     data = dict(row)
     data['items'] = []
@@ -168,7 +181,7 @@ def render_student(student, subject, cfg):
         r'\begin{tabular}{@{}p{.34\linewidth}p{.39\linewidth}p{.23\linewidth}@{}}',
         r'\textbf{' + title + '} & ' + r'\textbf{' + esc(label) + '} & ' + r'\textbf{' + esc(subject.get('classe') or '') + r'}\\',
         r'\end{tabular}\par',
-        r'\textbf{Note :} ' + ('--' if student.get('note_finale') is None else fmt(student['note_finale'])) + '/' + fmt(cfg.note_finale_max) + r'\par',
+        r'\textbf{' + ('Note provisoire :' if student.get('a_verifier') else 'Note :') + '} ' + ('--' if student.get('note_finale') is None else fmt(student['note_finale'])) + '/' + fmt(cfg.note_finale_max) + r'\par',
     ]
     if not individual_only:
         def score(value):
@@ -212,8 +225,8 @@ def render_student(student, subject, cfg):
             if index:
                 lines.append(r'\noalign{\hrule height 1pt}' if ex != previous_ex else r'\hline')
             items = group['items']
-            obtained = sum(float(item.get('points_obtenus') or 0) for item in items)
-            maximum = sum(float(item.get('bareme_max') or 0) for item in items)
+            obtained = _sum_scores(item.get('points_obtenus') for item in items)
+            maximum = _sum_scores(item.get('bareme_max') for item in items)
 
             descriptions, errors = [], []
             for item in items:
