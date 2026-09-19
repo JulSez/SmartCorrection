@@ -33,11 +33,14 @@ class ReintegratedCorrectionLayoutTests(unittest.TestCase):
         self.assertIn(r'\textbf{Note :}', tex)
         self.assertNotIn(r'\section*{Correction}', tex)
         self.assertIn(r'\section*{Conseil}', tex)
-        self.assertIn(r'\section*{Grille}', tex)
-        self.assertIn('Critère / erreur', tex)
+        self.assertIn(r'\section*{Résultats par question}', tex)
+        self.assertIn('Attendus / erreurs', tex)
+        self.assertIn('Méthode', tex)
+        self.assertIn('Calcul', tex)
         self.assertIn('Signe à revoir', tex)
-        self.assertIn(r'\dotfill', tex)
-        self.assertIn(r'\noalign{\hrule height 1.2pt}', tex)
+        self.assertIn('1,5/2', tex)
+        self.assertNotIn('0,5/1', tex)
+        self.assertNotIn(r'\dotfill', tex)
         self.assertNotIn('À vérifier par le prof', tex)
         self.assertNotIn(r'\SCtitle{Corrigé}', tex)
 
@@ -45,6 +48,8 @@ class ReintegratedCorrectionLayoutTests(unittest.TestCase):
         student = self.student()
         student['a_verifier'] = ['Lecture du signe à confirmer']
         tex = render.render_student(student, {'titre': 'Interro 1', 'classe': 'TEST'}, config_from_mapping(INDIVIDUAL))
+        self.assertIn('Note provisoire', tex)
+        self.assertIn('PROVISOIRE', tex)
         self.assertIn('À vérifier par le prof', tex)
         self.assertIn('Lecture du signe à confirmer', tex)
 
