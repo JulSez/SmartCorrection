@@ -41,7 +41,8 @@ def _grid(state):
 
 def _marking_rules():
     return ('Chaque item apparaît exactement une fois. Une perte de points exige une erreur courte dans commentaire ou annotation ; '
-            'ne répète ni le critère ni le corrigé. Conseils et annotations sont facultatifs ; un conseil seulement s’il ajoute quelque chose. '
+            'ne répète ni le critère ni le corrigé. La fiche élève regroupe ensuite les items par question : évite donc les commentaires redondants entre items d’une même question. '
+            'Une erreur doit tenir en quelques mots. Conseils et annotations sont facultatifs ; un conseil seulement s’il ajoute quelque chose. '
             'Tous ces champs sont du texte brut, pas du LaTeX.\n'
             'Si une copie est impossible à corriger sans deviner : mets-la uniquement dans a_revoir. '
             'a_verifier signale une incertitude non bloquante sur une correction complète.\n'+describe())
@@ -65,7 +66,8 @@ def make_prompt(app, ident, stage, version=None, mode='echantillon'):
             'exercices': [{'numero': '1', 'questions': [{'numero': '1', 'items': [
                 {'code': 'E1Q1I1', 'description': 'Résoudre', 'bareme_max': 2, 'regle_correction': 'Tolérance validée avec l’enseignant'}]}]}]}])
         return context + ('\n\nACTION : discuter et valider le barème. Propose une grille lisible, compacte : '
-            '1 à 3 items maximum par question par défaut, davantage seulement si nécessaire et validé. '
+            'vise 1 ou 2 items par question ; 3 seulement si trois attentes réellement distinctes doivent être notées séparément. '
+            'Ne découpe pas artificiellement une même étape en méthode / calcul / rédaction. '
             'Respecte le niveau de rédaction des savoir-faire ; ne crée pas de pénalité non discutée. '
             'Ne rends PAS le JSON avant l’accord de l’enseignant.\n'
             'Après accord : toutes les versions et grilles ; codes uniques par grille et stables ; numéros d’exercice/question en chaînes ; '

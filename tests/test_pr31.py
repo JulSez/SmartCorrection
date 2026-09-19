@@ -94,7 +94,8 @@ class FastCalibrationWorkflowTests(unittest.TestCase):
         self.assertIn('annotation : item_code', prompt)
         self.assertIn('pages_ignorees contient des objets', prompt)
         self.assertIn('a_verifier? = liste de textes', prompt)
-        self.assertIn('1 à 3 items maximum par question', make_prompt(self.app, self.ident, 'bareme'))
+        self.assertIn('vise 1 ou 2 items par question', make_prompt(self.app, self.ident, 'bareme'))
+        self.assertIn('3 seulement si trois attentes réellement distinctes', make_prompt(self.app, self.ident, 'bareme'))
         self.assertIn('erreur courte', prompt)
 
         first = self.envelope({
