@@ -112,10 +112,9 @@ def _layout_summary(layout):
         extra = ' Deux A6 portrait côte à côte forment une feuille A5 paysage.'
         if terminal == 'A4':
             extra += ' Deux feuilles A5 paysage seront imposées sur chaque feuille A4.'
-    page_break = 'oui' if c.get('newpage_after_correction', True) else 'non'
     return (f"Correction : {c['pages']}× {c['size']} {c['orientation']} ; "
             f"Corrigé : {r['pages']}× {r['size']} {r['orientation']}, {r['columns']} colonne(s) ; "
-            f"saut après correction : {page_break} ; assemblage : {join} ; impression terminale : {terminal}." + extra)
+            f"assemblage : {join} ; impression terminale : {terminal}." + extra)
 
 
 def _state(self, ident):

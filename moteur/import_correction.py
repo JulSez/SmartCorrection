@@ -1,5 +1,6 @@
 from __future__ import annotations
 from .db import database
+from .correction_contract import check_fields, STATUSES
 from .notes import compute_raw_score
 from .validation import array, integer, load_json, number, object_fields, string
 
@@ -29,7 +30,7 @@ def import_correction(data, conn, replace=False):
     codes = []
     for index, entry in enumerate(entries):
         where = f'correction.items[{index}]'
-        object_fields(entry, {'item_code', 'points_obtenus', 'statut', 'annotation', 'commentaire'}, {'item_code', 'points_obtenus'}, where)
+        check_fields(entry, 'item', where)
         code = string(entry['item_code'])
         if code not in items:
             raise ValueError(f'Item extérieur à la grille : {code}')
@@ -37,7 +38,7 @@ def import_correction(data, conn, replace=False):
         points = number(entry['points_obtenus'], f'points {code}')
         if points > items[code]['bareme_max']:
             raise ValueError(f'Points supérieurs au barème : {code}')
-        if entry.get('statut') is not None and (not isinstance(entry['statut'], str) or entry['statut'] not in {'acquis', 'partiel', 'non_acquis', 'non_repondu'}):
+        if entry.get('statut') is not None and (not isinstance(entry['statut'], str) or entry['statut'] not in STATUSES):
             raise ValueError(f'Statut inconnu : {code}')
         for key in ('annotation', 'commentaire'):
             string(entry.get(key), key, nullable=True)
@@ -69,7 +70,7 @@ def import_correction(data, conn, replace=False):
         return items[code]['id']
     for index, advice in enumerate(array(data.get('conseils', []), 'correction.conseils')):
         where = f'correction.conseils[{index}]'
-        object_fields(advice, {'item_code', 'texte', 'priorite'}, {'texte'}, where)
+        check_fields(advice, 'conseil', where)
         priority = advice.get('priorite')
         if priority is not None:
             integer(priority, where + '.priorite')
@@ -77,7 +78,7 @@ def import_correction(data, conn, replace=False):
                      (cid, item_id(advice), string(advice['texte'], where + '.texte'), priority))
     for index, annotation in enumerate(array(data.get('annotations', []), 'correction.annotations')):
         where = f'correction.annotations[{index}]'
-        object_fields(annotation, {'item_code', 'page', 'x', 'y', 'largeur', 'hauteur', 'texte', 'type_annotation'}, {'item_code', 'page', 'texte'}, where)
+        check_fields(annotation, 'annotation', where)
         page = integer(annotation['page'], where + '.page')
         for key in ('x', 'y', 'largeur', 'hauteur'):
             if annotation.get(key) is not None and number(annotation[key], where + '.' + key) > 1:

@@ -14,6 +14,7 @@ class FastCalibrationWorkflowTests(unittest.TestCase):
         self.app = WorkflowApplication(root/'db.sqlite', root/'data', root/'legacy')
         self.app.roster('TEST', 'nom;prenom\nAlpha;Alice\nBeta;Bob\nGamma;Chloe\nDelta;David\nEpsilon;Emma\nZeta;Zoe\n', True)
         self.ident = self.app.create('TEST', 'Interro')['id']
+        self.app.save_anonymity(self.ident, False)
 
     def envelope(self, payload):
         state = self.app.state(self.ident)
@@ -63,7 +64,8 @@ class FastCalibrationWorkflowTests(unittest.TestCase):
         prompt = make_prompt(self.app, self.ident, 'calibrage')
         self.assertIn('C006', prompt)
         self.assertIn('Sanctionner davantage', prompt)
-        self.assertIn('moyenne estimée précédente est élevée', prompt)
+        self.assertIn('jamais une cible', prompt)
+        self.assertTrue(all(c['a_revoir'] for c in self.app.state(self.ident)['copies'] if c['correction_id']))
 
         second = self.envelope({
             'corrections': [correction('C006')],
@@ -86,16 +88,14 @@ class FastCalibrationWorkflowTests(unittest.TestCase):
         })
         self.app.exchange(self.ident, 'bareme', json.dumps(bareme), True)
         prompt = make_prompt(self.app, self.ident, 'calibrage')
-        self.assertIn('"item_code": "E1Q1I1"', prompt)
-        self.assertIn('jamais "code"', prompt)
-        self.assertIn('conseils : [] par défaut', prompt)
-        self.assertIn('annotations : [] par défaut', prompt)
-        self.assertIn('pages_ignorees : liste d\'OBJETS', prompt)
-        self.assertIn('a_verifier : liste de CHAÎNES', prompt)
+        example = json.loads(prompt.split('```json\n')[1].split('\n```')[0])
+        self.assertEqual(example['corrections'][0]['items'][0]['item_code'], 'E1Q1I1')
+        self.assertIn('conseil : texte', prompt)
+        self.assertIn('annotation : item_code', prompt)
+        self.assertIn('pages_ignorees contient des objets', prompt)
+        self.assertIn('a_verifier? = liste de textes', prompt)
         self.assertIn('1 à 3 items maximum par question', make_prompt(self.app, self.ident, 'bareme'))
-        self.assertIn('La feuille élève affiche directement l\'erreur dans la grille', prompt)
-        self.assertIn('conseils : [] par défaut', prompt)
-        self.assertIn('une erreur = quelques mots', prompt)
+        self.assertIn('erreur courte', prompt)
 
         first = self.envelope({
             'pretraitement': {
@@ -146,13 +146,13 @@ class FastCalibrationWorkflowTests(unittest.TestCase):
     def test_prompts_match_fast_workflow(self):
         opening = make_prompt(self.app, self.ident, 'bareme')
         self.assertIn("Ne rends PAS le JSON", opening)
-        self.assertIn("Quand l'enseignant valide le barème", opening)
+        self.assertIn("avant l’accord de l’enseignant", opening)
         # After barème validation, the calibration prompt explicitly asks for the visible identity.
         bareme = self.envelope({'versions':[{'version':'A'}], 'grilles':[{'nom':'B','version':'A','exercices':[{'numero':'1','questions':[{'numero':'1','items':[{'code':'E1Q1I1','description':'Critère','bareme_max':1}]}]}]}]})
         self.app.exchange(self.ident, 'bareme', json.dumps(bareme), True)
         calibration = make_prompt(self.app, self.ident, 'calibrage')
         self.assertIn('identite_lue', calibration)
-        self.assertIn('numéro écrit par l', calibration)
+        self.assertIn('numéro écrit ou le nom/prénom lisible', calibration)
 
 
 if __name__ == '__main__':

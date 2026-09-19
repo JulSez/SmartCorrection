@@ -72,6 +72,7 @@ class FlexibleCopyIdentityTests(unittest.TestCase):
         self.assertEqual(copy.get('prenom'), 'Alice')
 
     def test_identity_read_accepts_number_or_name_and_can_be_adjusted(self):
+        self.app.save_anonymity(self.ident, False)
         payload = self._payload()
         payload['copies'][0]['identite_lue'] = 'n° 1'
         payload['copies'][1]['identite_lue'] = 'Bob Beta'

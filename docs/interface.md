@@ -20,16 +20,12 @@ AMS, Geometry, Longtable et Latin Modern. Babel français est recommandé.
 `pypdf` compte les pages des sources et assemble les PDF produits par LaTeX ; il ne compose
 pas les formules. Sans LaTeX, les imports et les exports de sources `.tex` restent utilisables.
 
-Les fiches sont en **A5 paysage**, divisées en deux zones **A6 portrait**. À gauche figurent
-le sujet, la version, la classe et l'élève, puis la note (une ligne, deux colonnes), le tableau
-**Question / Description du critère / Note / Retour** et les conseils. À droite figure le corrigé
-intégral. Les titres sont bleus et les en-têtes de tableaux bleu clair. Un contenu long continue
-du même côté sur les feuilles suivantes. Imprimer à taille réelle, sans agrandissement.
-Les noms restent locaux : les afficher sur les fiches ne les ajoute pas aux consignes pour l’IA.
-
-Exemple fictif du rendu (aucune donnée d'élève réelle) :
-
-![Fiche A5 paysage, correction à gauche et corrigé à droite](images/fiche-a5.png)
+Par défaut, les fiches sont en **A5 paysage**, divisées en deux zones **A6 portrait** :
+correction à gauche, corrigé à droite. La fiche contient les identifiants locaux, les notes,
+un tableau **Question / Critère-erreur / Note** et les conseils facultatifs. Les formats,
+colonnes du corrigé et assemblage se règlent dans l’interface. Les noms affichés localement
+ne sont jamais ajoutés aux consignes IA. L’ancienne option « Saut après correction », devenue
+sans effet avec le tableau compact, n’est plus proposée ; les réglages enregistrés restent compatibles.
 
 L’aperçu PDF intégré autorise uniquement une page de la même origine locale à l’afficher.
 Les pages de l’application restent interdites d’intégration ; les origines externes restent
@@ -69,32 +65,38 @@ aucun homonyme d’elle-même. Les anciens numéros de liste restent accessibles
 **Corriger un paquet de copies** demande la classe et le titre, puis crée un dossier reprenable.
 Les classes, dossiers, réponses en cours, documents générés et consignes survivent au redémarrage.
 
-## Le parcours en sept écrans
+## Le parcours en quatre écrans
 
-| Écran | Action de l’enseignant | Résultat conservé |
+| Écran | Action | Résultat |
 |---|---|---|
-| Préparer le dossier | Ajouter le paquet PDF, le sujet, les documents facultatifs ; copier la procédure dans l’IA et y joindre les PDF | Documents locaux et consignes utilisées au démarrage |
-| Grille | Discuter uniquement les critères et le barème ; coller le bloc JSON ; vérifier et valider | Grille relationnelle validée |
-| Corrigé | Envoyer la consigne dédiée ; coller le bloc LaTeX complet pour chaque version ; vérifier et valider | Corrigés par version, consultables et modifiables dans ce menu |
-| Repérer les copies | Coller le JSON des pages ; relire et rectifier au besoin identités, pages et versions dans le tableau | Copies logiques, pages physiques du paquet et absences déclarées |
-| Tester la correction | Choisir une à cinq copies ; coller leurs corrections ; générer les fiches ; demander des ajustements ; valider l’échantillon | Corrections structurées et PDF d’essai |
-| Corriger le reste | Copier la consigne pour toutes les copies restantes ; importer les réponses ; générer le document final | Fiches PDF assemblées, données JSON, notes CSV et sources LaTeX |
-| Retour d’expérience | Demander à l’IA de réécrire les consignes ; comparer puis valider les deux textes complets | Nouvelles consignes générales et de classe, avec historique |
+| Barème | Joindre les documents dans l’IA, discuter du barème, coller son JSON | Grille validée |
+| Calibrage | Importer le premier JSON complet, lire les fiches, noter les ajustements, essayer le lot suivant | Inventaire, corrigés de référence, corrections d’essai |
+| Correction complète | Copier la consigne actualisée et importer les réponses | Corrections de toutes les copies incluses |
+| Résultats | Générer les documents, puis préparer les consignes de la prochaine fois | PDF, notes CSV, consignes enregistrées |
 
-La correction de l’échantillon peut être remplacée autant que nécessaire. Le reste n’impose
-pas une succession de lots de cinq : si l’IA doit fractionner sa réponse, chaque réponse
-peut contenir plusieurs **copies complètes**. L’écran indique les copies encore à traiter.
+Garder **la même conversation IA** : les consignes ne répètent pas les longs corrigés déjà
+validés. Si le contexte manque, l’IA doit le demander, jamais le reconstituer de mémoire.
+Le premier JSON de calibrage contient l’inventaire complet, les corrigés de toutes les versions,
+jusqu’à cinq corrections et une moyenne estimée. Les suivants omettent l’inventaire enregistré
+et les références inchangées. La moyenne estimée est indicative, jamais une note cible.
 
-La notation de cette première interface est **individuelle, sur 20, arrondie au demi-point**.
-La note brute vient des `CorrectionItem`, puis Python convertit selon le total de la grille.
-Les absences restent `ABS`. Le moteur CLI conserve sa configuration plus large et ses groupes.
+Les remarques de calibrage sont cumulées et marquent les copies déjà corrigées **à revoir**.
+Les points enregistrés ne sont pas effacés. Réimporter les corrections ou les confirmer après
+vérification dans « Copies incluses et points à revoir ». Cliquer sur « La correction me convient »
+avec de nouvelles remarques les enregistre, mais exige de revoir le lot avant de valider.
+La correction complète peut être importée en plusieurs réponses contenant des **copies complètes**.
+Une copie illisible peut être déclarée dans `a_revoir`, sans inventer de points.
+
+Les groupes et les copies à exclure restent accessibles pendant le calibrage, la correction
+complète et les résultats. La notation par défaut est individuelle sur 20 ; l’option de groupe
+Maths expertes est décrite plus bas. Les absences restent `ABS`.
 
 ## Validation et reprises
 
-Le bouton « Vérifier » exécute toutes les validations dans une transaction annulée, puis présente
-le résultat. « Valider et enregistrer » relance ces validations et enregistre la réponse entière.
-Un seul item invalide annule toute la réponse, y compris les remplacements déjà commencés.
-Les doubles clés JSON, `NaN`, les champs inconnus et les réponses d’une ancienne grille sont rejetés.
+Les zones de réponse conservent leurs brouillons, y compris après redémarrage. L’import valide
+et enregistre la réponse dans une transaction : un item invalide annule toute la réponse.
+Le brouillon n’est effacé qu’après un import réussi. Les doubles clés JSON, `NaN`, les champs
+inconnus et les réponses d’une ancienne révision sont rejetés.
 
 Une copie non identifiée garde une référence `C001`, etc. Elle peut recevoir une fiche avec cette
 référence et la mention « élève non identifié », puis être associée à un élève sans perdre sa
@@ -130,34 +132,24 @@ réponse non vides ; elle n’apparaît plus pour les erreurs de génération ou
 
 ## Format à demander à l’IA
 
-Le bouton « Je valide l’échantillon » a été supprimé : passer de **Tester la correction** à
-**Corriger le reste**, avec « Étape suivante » ou le menu latéral, valide l’échantillon avant
-de changer d’écran. Si une copie manque, reste à revoir ou si la sélection n’est pas enregistrée,
-le serveur refuse la validation et l’application reste sur l’écran actuel avec l’explication.
-Revenir à une étape précédente ne valide rien. Les validations du JSON et des consignes
-pédagogiques restent explicites.
+La consigne apparaît automatiquement. Cliquer sur **Copier**, l’envoyer dans l’IA avec les
+PDF, puis coller le bloc JSON final à droite et utiliser le bouton d’import de l’étape.
+Les discussions pédagogiques peuvent précéder ce bloc ; le texte collé dans l’application
+doit contenir uniquement le JSON, éventuellement entouré de ses balises de bloc de code.
 
-La consigne s’affiche automatiquement à l’ouverture de chaque étape. Cliquer sur
-« Copier », puis l’envoyer dans la conversation avec l’IA. Coller ensuite
-la réponse de l’IA dans la zone de droite, puis cliquer sur « Vérifier » et « Enregistrer et continuer ». Aucun clic de génération
-n’est nécessaire. Après un changement de sélection des copies, enregistrer la sélection :
-la consigne s’actualise automatiquement. Les documents doivent être joints séparément dans l’IA.
+La consigne contient seulement le contrat utile à l’étape, le contexte pédagogique et les
+références nécessaires. Les champs de correction partagent une définition commune avec le
+validateur. Les commentaires et conseils sont du texte brut ; seuls les corrigés de référence
+sont du LaTeX. L’anonymat est activé par défaut : `identite_lue` et `numero` restent `null`.
+Si l’enseignant désactive l’anonymat, l’identité peut être lue sur la copie ; la liste de classe
+n’est jamais transmise. Les calculs de notes restent locaux.
 
-Utiliser en priorité cette consigne : elle contient l’identifiant du dossier,
-la révision courante, les items et les références des copies concernés, sans liste nominative. Les formats ci-dessous
-sont ceux de l’interface ; les commandes CLI conservent [leurs contrats](correction_format.md).
-Le rendu final de l’IA est **un unique bloc de code** `json` (ou `latex` pour le corrigé),
-sans texte autour ni autre mise en forme Markdown. Utiliser le bouton « Copier » du bloc.
-L’application accepte le contenu brut ainsi qu’un bloc complet avec ses balises ; elle ne
-cherche pas de données au milieu d’une discussion. Le JSON reste strict : sans commentaires,
-virgule finale, doubles clés ni nombres non finis.
+### Contrats historiques et compatibilité
 
-Chaque consigne est composée de deux parties. Le **bloc technique fixe** est généré par
-l’application et décrit le format entrée/sortie : enveloppe, champs autorisés, types JSON,
-valeurs nulles possibles, absence de calcul de notes et règle « réponse machine uniquement ».
-Il ne doit pas être réécrit pendant la discussion. Le bloc pédagogique est variable : il contient
-le sujet, la classe, la grille, le corrigé, les copies et les décisions de l’enseignant. L’IA
-peut le discuter et le préciser, puis doit produire le format fixé par le premier bloc.
+Les sections suivantes décrivent les échanges séparés encore acceptés par les routes de
+compatibilité. **Pour le parcours actuel, utiliser l’exemple complet affiché dans la consigne** :
+le calibrage regroupe inventaire, corrigés et corrections dans une seule enveloppe. Les contrats
+CLI restent décrits dans [correction_format.md](correction_format.md).
 
 ### Grille
 

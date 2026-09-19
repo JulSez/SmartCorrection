@@ -16,6 +16,7 @@ from .identites import preview_roster
 from .import_evaluation import import_evaluation
 from .import_correction import import_correction, compatible_grid
 from .calcul import calculate_selection
+from .correction_contract import check_fields, normalize_corrections
 from .gui_groups import group_state, save_groups, copy_groups
 from .render import export_results
 from .validation import array, integer, number, object_fields, parse_json, string
@@ -403,9 +404,9 @@ class Application:
         self._envelope(data,dossier,{'corrections','a_revoir'},{'corrections'})
         copies={c['reference']:c for c in self._copies(conn,dossier)}
         seen=set();summary=[]
-        for correction_index, correction in enumerate(array(data['corrections'],'corrections')):
+        for correction_index, correction in enumerate(normalize_corrections(data['corrections'])):
             where=f'corrections[{correction_index}]'
-            object_fields(correction,{'reference','items','annotations','conseils','commentaire_global','a_verifier'},{'reference','items'},where)
+            check_fields(correction, 'correction', where)
             ref=string(correction['reference'],where+'.reference')
             if ref in seen or ref not in copies:
                 raise ValueError(f'{where}.reference : copie répétée ou inconnue : {ref}')
@@ -418,7 +419,7 @@ class Application:
             maxima={r['code']:r['bareme_max'] for r in conn.execute('SELECT * FROM item WHERE grille_id=?',(grid_id,))}
             for item_index,item in enumerate(array(correction['items'],where+'.items',True)):
                 item_where=f'{where}.items[{item_index}]'
-                object_fields(item,{'item_code','points_obtenus','statut','annotation','commentaire'},{'item_code','points_obtenus'},item_where)
+                check_fields(item, 'item', item_where)
                 code=string(item.get('item_code'),item_where+'.item_code')
                 if code not in maxima:
                     raise ValueError(f'{item_where}.item_code : item inconnu : {code}')
@@ -455,7 +456,7 @@ class Application:
         pending=[]
         for pending_index,entry in enumerate(array(data.get('a_revoir',[]),'a_revoir')):
             where=f'a_revoir[{pending_index}]'
-            object_fields(entry,{'reference','motif'},{'reference','motif'},where)
+            check_fields(entry, 'a_revoir', where)
             ref=string(entry['reference'],where+'.reference')
             if ref not in copies or ref in seen or copies[ref]['statut']!='present':
                 raise ValueError('Copie à revoir inconnue ou répétée')
