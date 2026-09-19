@@ -3,7 +3,7 @@
 function opt(values,selected,label=x=>x){return values.map(x=>`<option value="${x}" ${String(selected)===String(x)?'selected':''}>${label(x)}</option>`).join('');}
 function currentLayout(){return state.layout||{correction:{size:'A6',orientation:'portrait',pages:1},corrige:{size:'A6',orientation:'portrait',pages:1,columns:1},assembly:'cote-a-cote',print_format:'auto'};}
 function layoutPayload(){return {
- correction:{size:$('#l-c-size').value,orientation:$('#l-c-orient').value,pages:Number($('#l-c-pages').value),newpage_after_correction:$('#l-c-newpage')?$('#l-c-newpage').checked:true},
+ correction:{size:$('#l-c-size').value,orientation:$('#l-c-orient').value,pages:Number($('#l-c-pages').value),newpage_after_correction:currentLayout().correction.newpage_after_correction??true},
  corrige:{size:$('#l-r-size').value,orientation:$('#l-r-orient').value,pages:Number($('#l-r-pages').value),columns:Number($('#l-r-columns').value)},
  assembly:$('#l-assembly').value,print_format:$('#l-print').value
 };}
@@ -12,7 +12,6 @@ function layoutCard(stage='setup'){
  const action=stage==='setup'?'<button class="primary" id="save-layout-preview">Enregistrer et voir le gabarit</button>':'<button id="save-layout">Enregistrer la mise en page</button>';
  return `<div class="card"><div class="eyebrow">1. Format de mise en page</div><h2>Correction, corrigé et impression</h2><p class="help">Choisissez le format logique de chaque partie, puis l’assemblage physique et le papier utilisé à l’impression.</p>
  <div class="row"><div class="field"><label>Correction — taille</label><select id="l-c-size">${opt(['A6','A5','A4'],c.size)}</select></div><div class="field"><label>Orientation</label><select id="l-c-orient">${opt(['portrait','paysage'],c.orientation)}</select></div><div class="field"><label>Pages dédiées</label><select id="l-c-pages">${opt([1,2,3,4],c.pages)}</select></div></div>
- <div class="field"><label><input id="l-c-newpage" type="checkbox" ${c.newpage_after_correction!==false?'checked':''}> Saut de page après la correction</label><small>Si activé, Conseils, Grille et éventuels éléments à vérifier commencent sur une nouvelle page.</small></div>
  <div class="row"><div class="field"><label>Corrigé — taille</label><select id="l-r-size">${opt(['A6','A5','A4'],r.size)}</select></div><div class="field"><label>Orientation</label><select id="l-r-orient">${opt(['portrait','paysage'],r.orientation)}</select></div><div class="field"><label>Pages dédiées</label><select id="l-r-pages">${opt([1,2,3,4],r.pages)}</select></div><div class="field"><label>Colonnes du corrigé</label><select id="l-r-columns">${opt([1,2],r.columns,x=>x+' colonne'+(x>1?'s':''))}</select></div></div>
  <div class="row"><div class="field"><label>Assemblage</label><select id="l-assembly"><option value="cote-a-cote" ${l.assembly==='cote-a-cote'?'selected':''}>Côte à côte</option><option value="separe" ${l.assembly==='separe'?'selected':''}>Feuilles séparées</option></select></div><div class="field"><label>Format terminal d’impression</label><select id="l-print">${opt(['auto','A6','A5','A4'],l.print_format,x=>x==='auto'?'Automatique':x)}</select></div></div>
  <div class="notice" id="layout-summary">${esc(state.layout_summary||'')}</div><div class="actions">${action}</div></div>`;

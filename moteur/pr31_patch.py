@@ -6,6 +6,7 @@ import json
 from .db import database
 from .gui_service import Application as BaseApplication, public_json, response_body
 from .validation import array, number, object_fields, parse_json, string
+from .correction_contract import normalize_corrections
 from . import gui_prompts_v2 as prompts
 from . import pr20_patch as pr20
 from . import pr25_patch as pr25
@@ -42,6 +43,13 @@ def _state(self, ident):
 
 
 def _draft(self, ident, stage, text):
+    if stage in {'bareme', 'calibrage'}:
+        if not isinstance(text, str):
+            raise ValueError('Texte attendu')
+        with database(self.db_path) as conn:
+            self._dossier(conn, ident)
+            conn.execute('INSERT INTO ui_brouillon VALUES(?,?,?) ON CONFLICT(dossier_id,etape) DO UPDATE SET texte=excluded.texte', (ident,stage,text))
+        return {'enregistre': True}
     if stage != "calibrage-retours":
         return _BASE_DRAFT(self, ident, stage, text)
     if not isinstance(text, str):
@@ -53,7 +61,14 @@ def _draft(self, ident, stage, text):
         self._dossier(conn, ident)
         old = _meta(conn, _RETURNS_KEY.format(ident)).strip()
         combined = (old + "\n\n" if old else "") + clean
+        if old == clean or old.endswith('\n\n'+clean):
+            return {'enregistre': False}
         _set_meta(conn, _RETURNS_KEY.format(ident), combined)
+        conn.execute("""UPDATE ui_copie SET a_revoir=COALESCE(a_revoir || '\n', '') ||
+            'Consignes de calibrage modifiées : reprendre cette correction'
+            WHERE dossier_id=? AND copie_id IN (SELECT copie_id FROM correction)""", (ident,))
+        conn.execute('UPDATE ui_dossier SET echantillon_valide=0,termine=0 WHERE id=?', (ident,))
+        conn.execute('UPDATE ui_rendu SET valide=0 WHERE dossier_id=?', (ident,))
     return {"enregistre": True}
 
 
@@ -76,6 +91,13 @@ def _save_corriges(conn, dossier, entries):
         latex = string(item["corrige_latex"], f"corrigé {version}")
         if any(word in latex for word in (r"\documentclass", r"\begin{document}", r"\end{document}")):
             raise ValueError(f"Corrigé {version} : fournir uniquement le corps LaTeX")
+        old = conn.execute('SELECT str_latex FROM corrige WHERE version_id=?', (versions[version],)).fetchone()
+        if old and old[0] != latex:
+            conn.execute("""UPDATE ui_copie SET a_revoir=COALESCE(a_revoir || '\n', '') ||
+                'Corrigé de référence modifié : vérifier cette correction'
+                WHERE dossier_id=? AND copie_id IN
+                (SELECT c.id FROM copie c JOIN correction co ON co.copie_id=c.id WHERE c.version_id=?)""",
+                (dossier['id'], versions[version]))
         conn.execute("""INSERT INTO corrige(version_id,str_latex) VALUES(?,?)
             ON CONFLICT(version_id) DO UPDATE SET str_latex=excluded.str_latex""",
             (versions[version], latex))
@@ -84,39 +106,14 @@ def _save_corriges(conn, dossier, entries):
         raise ValueError(f"Corrigé manquant pour : {missing}")
 
 
-def _normalize_correction_items(corrections):
-    """Accept the common AI alias 'code' but store the canonical 'item_code'."""
-    normalized = []
-    for correction in corrections:
-        if not isinstance(correction, dict):
-            normalized.append(correction)
-            continue
-        copy = dict(correction)
-        items = []
-        for item in copy.get("items", []):
-            if not isinstance(item, dict):
-                items.append(item)
-                continue
-            clean = dict(item)
-            if "code" in clean:
-                if "item_code" in clean and clean["item_code"] != clean["code"]:
-                    raise ValueError("Un item contient code et item_code avec des valeurs différentes.")
-                clean.setdefault("item_code", clean["code"])
-                clean.pop("code", None)
-            items.append(clean)
-        copy["items"] = items
-        normalized.append(copy)
-    return normalized
-
-
 def _calibration(self, conn, dossier, data):
     allowed = {"dossier", "revision", "pretraitement", "corriges", "corrections", "a_revoir", "moyenne_estimee"}
-    object_fields(data, allowed, {"dossier", "revision", "corrections", "moyenne_estimee"})
-    if data["dossier"] != dossier["id"] or data["revision"] != dossier["revision"]:
-        raise ValueError("Cette réponse vise un autre dossier ou une ancienne grille.")
+    self._envelope(data, dossier, allowed, {"corrections", "moyenne_estimee"})
 
     had_copies = bool(conn.execute("SELECT 1 FROM ui_copie WHERE dossier_id=? LIMIT 1", (dossier["id"],)).fetchone())
     prep = pr20._read_preprocessing(conn, dossier["id"])
+    if prep and 'pretraitement' in data:
+        raise ValueError('Inventaire déjà enregistré : retirer pretraitement de ce lot ; modifier les affectations localement')
     if not prep:
         raw = data.get("pretraitement")
         if not isinstance(raw, dict):
@@ -142,8 +139,14 @@ def _calibration(self, conn, dossier, data):
     elif "corriges" in data:
         _save_corriges(conn, dossier, data["corriges"])
 
-    corrections = _normalize_correction_items(array(data["corrections"], "corrections", True))
-    refs = [string(c.get("reference"), "reference") for c in corrections if isinstance(c, dict)]
+    corrections = normalize_corrections(data['corrections'])
+    pending = array(data.get('a_revoir', []), 'a_revoir')
+    refs = []
+    for entries, label in ((corrections, 'corrections'), (pending, 'a_revoir')):
+        for i, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                raise ValueError(f'{label}[{i}]: objet attendu')
+            refs.append(string(entry.get('reference'), f'{label}[{i}].reference'))
     if not 1 <= len(refs) <= 5 or len(set(refs)) != len(refs):
         raise ValueError("Le lot de calibrage doit contenir entre 1 et 5 copies distinctes.")
 
@@ -187,221 +190,12 @@ def _exchange(self, ident, stage, text, commit=False):
         return result
 
 
-def _bareme_prompt(app, ident):
-    prefix, state = prompts._prefix(app, ident)
-    d = state["dossier"]
-    example = {
-        "dossier": ident, "revision": d["revision"],
-        "versions": [{"version": "A"}],
-        "grilles": [{
-            "nom": "Barème", "version": "A",
-            "exercices": [{"numero": "1", "questions": [{"numero": "1", "items": [
-                {"code": "E1Q1I1", "description": "Critère précis", "bareme_max": 1}
-            ]}]}],
-        }],
-    }
-    return prefix + """
-OBJECTIF — construire le barème avec l'enseignant.
-Analyse le sujet, les savoir-faire, les documents de référence et les copies jointes. Propose d'abord un barème compact et discute-le normalement avec l'enseignant. Ne rends PAS le JSON tant que l'enseignant n'a pas indiqué que le barème lui convient.
-PAR DÉFAUT, fais simple : 1 à 3 items maximum par question. Regroupe les micro-critères qui évaluent la même idée. Chaque description doit être courte, concrète et compréhensible par un élève (quelques mots, pas une phrase de correction). Le but est qu'une grille A6 reste immédiatement lisible.
-Ne multiplie les items ou les explications que si l'enseignant le demande explicitement. Mieux vaut une première proposition trop compacte que trop détaillée.
-Pendant la discussion, tiens compte explicitement de ses décisions sur la sévérité, les erreurs de calcul, la rédaction, les équivalences, les symboles et les pénalités.
-Quand l'enseignant valide le barème dans la conversation, rends alors uniquement un bloc JSON complet, sans texte autour, avec cette structure :
-""" + public_json(example)
-
-
-
-def _correction_json_contract():
-    return r"""
-CONTRAT JSON STRICT — CORRECTION COMPACTE
-La feuille élève affiche directement l'erreur dans la grille : il n'y a PAS une section "Correction" séparée.
-Objectif prioritaire : une lecture rapide. Sois court. Le professeur demandera plus de détail si nécessaire.
-
-corrections est une liste d'objets. Chaque correction :
-{
-  "reference": "C001",
-  "items": [
-    {
-      "item_code": "E1Q1I1",
-      "points_obtenus": 1,
-      "statut": "partiel",
-      "commentaire": "Erreur de signe.",
-      "annotation": null
-    }
-  ],
-  "annotations": [],
-  "conseils": [],
-  "commentaire_global": null,
-  "a_verifier": []
-}
-
-Règles impératives :
-- items : un objet par item du barème, exactement une fois. Utilise "item_code", jamais "code".
-- points_obtenus : nombre JSON, jamais null, entre 0 et le maximum.
-- statut : facultatif ; null ou "acquis", "partiel", "non_acquis", "non_repondu".
-- commentaire : PAR DÉFAUT null si tous les points sont obtenus. Si des points sont perdus, indique seulement l'erreur de l'élève, de la manière la plus directe possible : "Erreur de signe.", "Équivalent manquant.", "Calcul faux.", "Conclusion absente.". Pas d'explication de cours, pas de reformulation longue, pas de formule de politesse.
-- annotation dans items : facultative ; même exigence de brièveté que commentaire. N'utilise pas commentaire ET annotation pour dire la même chose.
-- annotations : [] par défaut. N'ajoute un objet localisé que si la localisation sur la copie apporte réellement quelque chose. Objet : {"item_code":"E1Q1I1","page":2,"texte":"Signe faux.","x":null,"y":null,"largeur":null,"hauteur":null,"type_annotation":null}.
-- conseils : [] par défaut. N'ajoute qu'un conseil très court si cela apporte une information différente de l'erreur déjà écrite dans la grille. Évite de répéter "attention", "pense à", ou le critère. Maximum recommandé : 1 conseil par copie.
-- commentaire_global : null par défaut. Utilise une seule courte phrase seulement si elle apporte une synthèse indispensable non visible dans la grille.
-- a_verifier : liste de CHAÎNES très courtes réservée aux incertitudes de lecture du professeur ; [] si aucune.
-- a_revoir : liste d'objets {"reference":"C001","motif":"..."} seulement si la copie ne peut pas être corrigée sans deviner.
-
-STYLE ÉLÈVE :
-- la grille elle-même porte la correction ;
-- ne répète jamais le critère dans le commentaire ;
-- ne raconte pas la démarche de l'élève ;
-- ne donne pas une mini-correction rédigée dans chaque item ;
-- une erreur = quelques mots ;
-- privilégie le vide à un texte inutile.
-"""
-
-def _preprocessing_json_contract():
-    return r"""
-CONTRAT JSON STRICT DU PRÉTRAITEMENT
-pretraitement est un objet :
-{
-  "copies": [
-    {
-      "reference": "C001",
-      "identite_lue": "17",
-      "numero": null,
-      "version": "A",
-      "pages": [1, 2]
-    }
-  ],
-  "pages_ignorees": [
-    {"page": 3, "motif": "page blanche"}
-  ],
-  "absents": []
-}
-
-Règles impératives :
-- reference : chaîne C001, C002, etc., unique.
-- identite_lue : chaîne contenant exactement ce qui est lisible sur la copie (numéro écrit par l'élève, ou nom/prénom), ou null. N'invente rien.
-- numero : toujours null dans la réponse IA ; l'association à la liste locale est faite ensuite par SmartCorrection et peut être corrigée par le professeur.
-- version : chaîne correspondant à une version du sujet.
-- pages : liste non vide d'entiers, dans l'ordre du paquet.
-- pages_ignorees : liste d'OBJETS {"page": entier, "motif": chaîne}, jamais une liste de numéros ni de textes.
-- absents : toujours [] ; l'IA ne déduit pas les absences.
-"""
-
-def _corriges_json_contract():
-    return r"""
-CONTRAT JSON STRICT DES CORRIGÉS
-corriges est une liste d'objets :
-[
-  {
-    "version": "A",
-    "corrige_latex": "\\section*{Exercice 1} ...",
-    "sujet_latex": "\\textit{Sujet joint en PDF.}"
-  }
-]
-Règles impératives :
-- version et corrige_latex sont obligatoires.
-- sujet_latex est facultatif.
-- corrige_latex contient seulement le corps LaTeX : pas de documentclass, begin{document} ni end{document}.
-"""
-
-def _calibration_prompt(app, ident):
-    prefix, state = prompts._prefix(app, ident)
-    d = state["dossier"]
-    copies = state.get("copies") or []
-    selected = [c["reference"] for c in copies if c.get("echantillon")]
-    first = not copies
-    if first:
-        target = "les cinq premières copies du paquet (ou toutes s'il y en a moins de cinq)"
-    else:
-        target = ", ".join(selected)
-    returns = (state.get("calibrage") or {}).get("retours") or "Aucun ajustement encore."
-    mean = (state.get("calibrage") or {}).get("moyenne_estimee")
-    vigilance = ""
-    if mean not in (None, ""):
-        try:
-            if float(mean) >= 14:
-                vigilance = (" La moyenne estimée précédente est élevée : cherche particulièrement les petites erreurs de calcul, "
-                             "notations imprécises, oublis de justification et défauts de rédaction, sans inventer d'erreur ni viser artificiellement une moyenne.")
-        except ValueError:
-            pass
-    first_fields = ("""
-Pour ce PREMIER lot seulement, le même JSON doit aussi contenir le prétraitement COMPLET du paquet et TOUS les corrigés de référence.
-""" + _preprocessing_json_contract() + _corriges_json_contract()) if first else """
-Le prétraitement et les corrigés sont déjà enregistrés : ne les répète pas sauf si l'enseignant t'a explicitement demandé de les corriger.
-"""
-    example_ref = selected[0] if selected else "C001"
-    example = {
-        "dossier": ident,
-        "revision": d["revision"],
-        "corrections": [{
-            "reference": example_ref,
-            "items": [{
-                "item_code": "E1Q1I1",
-                "points_obtenus": 1,
-                "statut": "partiel",
-                "commentaire": "Erreur de signe.",
-                "annotation": None,
-            }],
-            "annotations": [],
-            "conseils": [],
-            "commentaire_global": None,
-            "a_verifier": [],
-        }],
-        "a_revoir": [],
-        "moyenne_estimee": 12.5,
-    }
-    if first:
-        example["pretraitement"] = {
-            "copies": [{
-                "reference": "C001",
-                "identite_lue": "17",
-                "numero": None,
-                "version": "A",
-                "pages": [1, 2],
-            }],
-            "pages_ignorees": [{"page": 3, "motif": "page blanche"}],
-            "absents": [],
-        }
-        example["corriges"] = [{
-            "version": "A",
-            "corrige_latex": r"\section*{Exercice 1} ...",
-            "sujet_latex": r"\textit{Sujet joint en PDF.}",
-        }]
-    return prefix + f"""
-CALIBRAGE DE LA CORRECTION — même écran, boucle par lots.
-Corrige exactement ce lot : {target}.
-{first_fields}
-Applique le barème validé et toutes les décisions pédagogiques suivantes, accumulées pendant le calibrage.
-La sortie destinée à l'élève doit rester COMPACTE : la grille contient déjà les critères ; le commentaire sert uniquement à nommer directement l'erreur. Ne duplique pas la correction dans plusieurs champs.
---- DÉCISIONS DE L'ENSEIGNANT ---
-{returns}
---- FIN DES DÉCISIONS ---
-{vigilance}
-Donne aussi moyenne_estimee, ton estimation actuelle de la moyenne finale de la classe sur 20. Cette estimation est un signal de vigilance, jamais une cible : ne durcis ni n'assouplis artificiellement pour atteindre une moyenne.
-
-{_correction_json_contract()}
-
-ENVELOPPE FINALE À RENDRE
-Rends uniquement UN bloc JSON complet, sans commentaire autour.
-Voici un EXEMPLE STRUCTUREL VALIDE pour ce lot ; remplace les valeurs par celles réellement lues/corrigées :
-{public_json(example)}
-{"Au premier lot, pretraitement et corriges sont obligatoires et doivent être complets." if first else "Pour ce lot, n'ajoute PAS pretraitement ni corriges : ils sont déjà enregistrés."}
-Ne remplace jamais une structure inconnue par une supposition : le présent contrat décrit tous les champs autorisés.
-"""
-
-
 def _make_prompt(app, ident, stage, version=None, mode="echantillon"):
-    if stage == "bareme":
-        return _bareme_prompt(app, ident)
-    if stage == "calibrage":
-        return _calibration_prompt(app, ident)
-    if stage == "correction" and mode == "reste":
-        base = _BASE_PROMPT(app, ident, stage, version, mode)
-        state = app.state(ident)
-        returns = (state.get("calibrage") or {}).get("retours")
-        if returns:
-            base += "\n\nDÉCISIONS FIGÉES PENDANT LE CALIBRAGE — applique-les à toutes les copies restantes :\n" + returns
-        base += "\n\n" + _correction_json_contract()
-        return base
+    # Active screens have one canonical prompt builder. Legacy routes remain
+    # available for old integrations, but are never appended to active prompts.
+    if stage in {'bareme', 'calibrage', 'correction', 'retour'}:
+        from .workflow_prompts import make_prompt
+        return make_prompt(app, ident, stage, version, mode)
     return _BASE_PROMPT(app, ident, stage, version, mode)
 
 

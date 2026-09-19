@@ -14,18 +14,23 @@ python -m moteur gui
 ```
 
 Le navigateur s’ouvre sur une application locale avec deux boutons : **Ajouter une classe**
-(CSV nom/prénom) et **Corriger un paquet de copies**. Le parcours prépare les messages à copier
-dans ChatGPT, valide les JSON de grille et de correction, permet un essai sur cinq copies,
-puis produit les fiches du paquet entier. Les consignes générales et de classe sont réécrites
-avec ChatGPT en fin de correction et conservées dans SQLite pour les prochains dossiers.
+(CSV nom/prénom) et **Corriger un paquet de copies**.
 
-**LaTeX reste le moteur de rendu mathématique.** `pypdf` compte les pages et assemble les PDF.
-Les fiches sont en A5 paysage : correction, note et conseils à gauche ; corrigé à droite,
-dans deux zones A6 portrait avec des accents bleus. Les contenus longs continuent sur les
-feuilles suivantes en conservant leur côté.
-Cette première interface utilise une notation individuelle sur 20, sans groupe.
+Le parcours comporte quatre écrans : **Barème → Calibrage → Correction complète → Résultats**.
+Chaque consigne s’affiche directement : la copier dans la même conversation IA, y joindre les
+PDF, puis coller le JSON final dans l’application. Le premier calibrage rassemble l’inventaire,
+les corrigés de référence et jusqu’à cinq corrections ; les lots suivants ne répètent plus les
+éléments déjà enregistrés. Les ajustements de calibrage signalent les anciennes copies à reprendre.
+Les consignes générales et de classe peuvent être réécrites en fin de correction et conservées dans SQLite.
 
-[Installation, parcours et formats des réponses ChatGPT](docs/interface.md)
+**LaTeX reste le moteur de rendu mathématique.** `pypdf` assemble les PDF.
+Le format par défaut est A5 paysage : fiche de correction à gauche, corrigé à droite, en deux
+zones A6 portrait. La fiche regroupe les critères, points et retours dans un tableau compact,
+avec des conseils facultatifs. Les formats et l’assemblage sont configurables.
+La note est individuelle sur 20 par défaut. L’option Maths expertes ajoute individuel /15 +
+moyenne des autres camarades /5 ; les identités et groupes restent locaux.
+
+[Installation, parcours et formats des réponses IA](docs/interface.md)
 
 ## Premier pipeline en ligne de commande
 

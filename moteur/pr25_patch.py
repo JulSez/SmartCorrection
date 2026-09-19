@@ -41,6 +41,8 @@ def _validate_preprocessing(data, dossier, anonymous=True):
             raise ValueError('Indiquer les pages dans l’ordre du paquet')
         clean = {'reference': ref, 'numero': None, 'version': version, 'pages': checked}
         identity = item.get('identite_lue')
+        if anonymous and identity is not None:
+            raise ValueError('Mode anonyme : identite_lue doit être null ; désactiver l’anonymat pour lire les identités')
         clean['identite_lue'] = None if identity is None else string(identity, 'identite_lue').strip() or None
         if not anonymous:
             clean['nom'] = previous._clean_name(item.get('nom'), 'nom')
