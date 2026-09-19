@@ -122,7 +122,7 @@ def build_student_data(conn, result, row):
         data['commentaire_global'] = conn.execute('SELECT commentaire_global FROM correction WHERE id=?', (cid,)).fetchone()[0]
         data['a_verifier'] = [r['texte'] for r in conn.execute('SELECT texte FROM ui_verification WHERE copie_id=? ORDER BY ordre', (row['copie_id'],))]
         data['items'] = [dict(r) for r in conn.execute('''SELECT i.code,i.description,i.bareme_max,
-            e.numero exercice,q.numero question,ci.points_obtenus,ci.statut,ci.commentaire,ci.annotation
+            e.numero exercice,q.numero question,q.texte question_texte,ci.points_obtenus,ci.statut,ci.commentaire,ci.annotation
             FROM correction_item ci JOIN item i ON i.id=ci.item_id JOIN question q ON q.id=i.question_id
             JOIN exercice e ON e.id=q.exercice_id WHERE ci.correction_id=? ORDER BY e.ordre,q.ordre,i.ordre,i.id''', (cid,))]
         for table in ('annotations', 'conseils'):
@@ -184,39 +184,63 @@ def render_student(student, subject, cfg):
     if student.get('statut') == 'absent':
         lines += [r'\textbf{Absence déclarée.}']
     else:
-        lines += [r'\section*{Grille}',
-                  r'\renewcommand{\arraystretch}{1.10}',
+        lines += [r'\section*{Résultats par question}',
+                  r'\renewcommand{\arraystretch}{1.08}',
                   r'\setlength{\LTpre}{0pt}\setlength{\LTpost}{2pt}',
-                  r'\begin{longtable}{@{}>{\raggedright\arraybackslash}p{.20\linewidth}>{\raggedright\arraybackslash}p{.58\linewidth}>{\centering\arraybackslash}p{.18\linewidth}@{}}',
-                  r'\small\textcolor{SCblue}{\textbf{Question}} & \small\textcolor{SCblue}{\textbf{Critère / erreur}} & \small\textcolor{SCblue}{\textbf{Note}}\\\noalign{\hrule height .8pt}\endhead']
+                  r'\begin{longtable}{@{}>{\raggedright\arraybackslash}p{.16\linewidth}>{\raggedright\arraybackslash}p{.64\linewidth}>{\centering\arraybackslash}p{.16\linewidth}@{}}',
+                  r'\small\textcolor{SCblue}{\textbf{Question}} & \small\textcolor{SCblue}{\textbf{Attendus / erreurs}} & \small\textcolor{SCblue}{\textbf{Note}}\\\noalign{\hrule height .8pt}\endhead']
         annotations_by_item = {}
         for annotation in student.get('annotations', []):
             code = annotation.get('item_code')
             text = str(annotation.get('texte') or '').strip()
             if code and text:
                 annotations_by_item.setdefault(code, []).append(text)
-        previous_ex = previous_q = None
-        for index, item in enumerate(student.get('items', [])):
-            ex, q = str(item.get('exercice','?')), str(item.get('question','?'))
+
+        groups = []
+        by_question = {}
+        for item in student.get('items', []):
+            key = (str(item.get('exercice','?')), str(item.get('question','?')))
+            if key not in by_question:
+                group = {'exercice': key[0], 'question': key[1], 'items': []}
+                by_question[key] = group
+                groups.append(group)
+            by_question[key]['items'].append(item)
+
+        previous_ex = None
+        for index, group in enumerate(groups):
+            ex, q = group['exercice'], group['question']
             if index:
-                if ex != previous_ex:
-                    lines.append(r'\noalign{\hrule height 1.2pt}')
-                elif q != previous_q:
-                    lines.append(r'\hline')
-                else:
-                    lines.append(r'\multicolumn{3}{@{}l@{}}{\makebox[\linewidth]{\color{black!32}\dotfill}}\\[-4pt]')
-            question = esc('Ex. '+ex) + r'\newline ' + esc('Q. '+q)
-            criterion = esc(item.get('description') or '')
-            errors = []
-            for value in (item.get('commentaire'), item.get('annotation')):
-                if value and str(value).strip():
-                    errors.append(str(value).strip())
-            errors.extend(annotations_by_item.get(item.get('code'), []))
+                lines.append(r'\noalign{\hrule height 1pt}' if ex != previous_ex else r'\hline')
+            items = group['items']
+            obtained = sum(float(item.get('points_obtenus') or 0) for item in items)
+            maximum = sum(float(item.get('bareme_max') or 0) for item in items)
+
+            descriptions, errors = [], []
+            for item in items:
+                desc = str(item.get('description') or '').strip()
+                if desc and desc not in descriptions:
+                    descriptions.append(desc)
+                for value in (item.get('commentaire'), item.get('annotation')):
+                    text = str(value or '').strip()
+                    if text and text not in errors:
+                        errors.append(text)
+                for text in annotations_by_item.get(item.get('code'), []):
+                    if text not in errors:
+                        errors.append(text)
+
+            question_text = str(items[0].get('question_texte') or '').strip()
+            summary = ' · '.join(descriptions) or question_text or 'Question'
+            content = esc(summary)
             if errors:
-                criterion += r'\newline {\scriptsize\textit{' + esc(' ; '.join(dict.fromkeys(errors))) + '}}'
-            lines.append(question+' & '+criterion+' & '+fmt(item.get('points_obtenus'))+'/'+fmt(item.get('bareme_max'))+r'\\')
-            previous_ex, previous_q = ex, q
+                content += r'\newline {\scriptsize\textit{' + esc(' ; '.join(errors)) + '}}'
+            label = ('Ex. '+ex+' — ' if ex != previous_ex else '') + 'Q. '+q
+            lines.append(esc(label)+' & '+content+' & '+fmt(obtained)+'/'+fmt(maximum)+r'\\')
+            previous_ex = ex
         lines += [r'\hline', r'\end{longtable}']
+
+        checks = [str(x).strip() for x in student.get('a_verifier', []) if str(x).strip()]
+        if checks:
+            lines += [r'{\bfseries\small\textcolor{SCblue}{PROVISOIRE — vérification du professeur nécessaire.}}\par']
 
         if student.get('commentaire_global'):
             lines += [r'{\scriptsize ' + esc(student['commentaire_global']) + r'}\par']
