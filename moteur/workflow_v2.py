@@ -113,6 +113,7 @@ def _apply_corriges(conn, dossier, corriges):
 
 def _dummy_student(version, corrige_latex, items=None):
     return {
+        'grille_vierge': True,
         'numero': None,
         'label': '........................................................',
         'version': version or 'Commune',

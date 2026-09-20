@@ -1,4 +1,4 @@
-"""Render only: every displayed score is supplied by calcul.py."""
+"""Render supplied scores; question subtotals are presentation-only sums."""
 import csv
 import hashlib
 import io
@@ -12,6 +12,7 @@ import tempfile
 import time
 import unicodedata
 from contextvars import ContextVar
+from decimal import Decimal
 from .notes import config_from_mapping
 
 
@@ -105,19 +106,6 @@ def fmt(value):
     return 'ABS' if value is None else format(value, '.10g').replace('.', ',')
 
 
-def _sum_scores(values):
-    """Sum numeric scores; preserve blank preview placeholders as blank."""
-    total = 0.0
-    for value in values:
-        if value is None:
-            continue
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            total += float(value)
-            continue
-        return value
-    return total
-
-
 def build_student_data(conn, result, row):
     data = dict(row)
     data['items'] = []
@@ -144,6 +132,28 @@ def build_student_data(conn, result, row):
             data[table] = [{k: r[k] for k in r.keys() if k not in {'id', 'correction_id', 'item_id'}} for r in conn.execute(f'''SELECT t.*,i.code item_code FROM {singular} t
                 LEFT JOIN item i ON i.id=t.item_id WHERE t.correction_id=? ORDER BY {ordering}''', (cid,))]
     return data
+
+
+def question_summary(student):
+    """Project the detailed marking grid without changing grades or stored items."""
+    annotations = {}
+    for entry in student.get('annotations', []):
+        annotations.setdefault(entry.get('item_code'), []).append(entry.get('texte'))
+    questions = {}
+    for item in student.get('items', []):
+        key = (str(item.get('exercice', '?')), str(item.get('question', '?')))
+        row = questions.setdefault(key, {'exercice': key[0], 'question': key[1],
+                                        'points': Decimal(0), 'maximum': Decimal(0), 'erreurs': []})
+        points = Decimal(0) if student.get('grille_vierge') else Decimal(str(item['points_obtenus']))
+        maximum = Decimal(str(item['bareme_max']))
+        row['points'] += points
+        row['maximum'] += maximum
+        if not student.get('grille_vierge') and points < maximum:
+            for value in [item.get('commentaire'), item.get('annotation'), *annotations.get(item.get('code'), [])]:
+                text = str(value or '').strip()
+                if text and text not in row['erreurs']:
+                    row['erreurs'].append(text)
+    return list(questions.values())
 
 
 def render_student(student, subject, cfg):
@@ -197,58 +207,21 @@ def render_student(student, subject, cfg):
     if student.get('statut') == 'absent':
         lines += [r'\textbf{Absence déclarée.}']
     else:
-        lines += [r'\section*{Résultats par question}',
-                  r'\renewcommand{\arraystretch}{1.08}',
+        lines += [r'\section*{Bilan par question}',
+                  r'\renewcommand{\arraystretch}{1.15}',
                   r'\setlength{\LTpre}{0pt}\setlength{\LTpost}{2pt}',
-                  r'\begin{longtable}{@{}>{\raggedright\arraybackslash}p{.16\linewidth}>{\raggedright\arraybackslash}p{.64\linewidth}>{\centering\arraybackslash}p{.16\linewidth}@{}}',
-                  r'\small\textcolor{SCblue}{\textbf{Question}} & \small\textcolor{SCblue}{\textbf{Attendus / erreurs}} & \small\textcolor{SCblue}{\textbf{Note}}\\\noalign{\hrule height .8pt}\endhead']
-        annotations_by_item = {}
-        for annotation in student.get('annotations', []):
-            code = annotation.get('item_code')
-            text = str(annotation.get('texte') or '').strip()
-            if code and text:
-                annotations_by_item.setdefault(code, []).append(text)
-
-        groups = []
-        by_question = {}
-        for item in student.get('items', []):
-            key = (str(item.get('exercice','?')), str(item.get('question','?')))
-            if key not in by_question:
-                group = {'exercice': key[0], 'question': key[1], 'items': []}
-                by_question[key] = group
-                groups.append(group)
-            by_question[key]['items'].append(item)
-
+                  r'\begin{longtable}{@{}>{\raggedright\arraybackslash}p{.20\linewidth}>{\raggedright\arraybackslash}p{.58\linewidth}>{\centering\arraybackslash}p{.18\linewidth}@{}}',
+                  r'\small\textcolor{SCblue}{\textbf{Question}} & \small\textcolor{SCblue}{\textbf{Erreurs}} & \small\textcolor{SCblue}{\textbf{Note}}\\\noalign{\hrule height .8pt}\endhead']
         previous_ex = None
-        for index, group in enumerate(groups):
-            ex, q = group['exercice'], group['question']
+        for index, question in enumerate(question_summary(student)):
             if index:
-                lines.append(r'\noalign{\hrule height 1pt}' if ex != previous_ex else r'\hline')
-            items = group['items']
-            obtained = _sum_scores(item.get('points_obtenus') for item in items)
-            maximum = _sum_scores(item.get('bareme_max') for item in items)
-
-            descriptions, errors = [], []
-            for item in items:
-                desc = str(item.get('description') or '').strip()
-                if desc and desc not in descriptions:
-                    descriptions.append(desc)
-                for value in (item.get('commentaire'), item.get('annotation')):
-                    text = str(value or '').strip()
-                    if text and text not in errors:
-                        errors.append(text)
-                for text in annotations_by_item.get(item.get('code'), []):
-                    if text not in errors:
-                        errors.append(text)
-
-            question_text = str(items[0].get('question_texte') or '').strip()
-            summary = ' · '.join(descriptions) or question_text or 'Question'
-            content = esc(summary)
-            if errors:
-                content += r'\newline {\scriptsize\textit{' + esc(' ; '.join(errors)) + '}}'
-            label = ('Ex. '+ex+' — ' if ex != previous_ex else '') + 'Q. '+q
-            lines.append(esc(label)+' & '+content+' & '+fmt(obtained)+'/'+fmt(maximum)+r'\\')
-            previous_ex = ex
+                lines.append(r'\noalign{\hrule height 1.2pt}' if question['exercice'] != previous_ex else r'\hline')
+            label = esc('Ex. '+question['exercice']) + r'\newline ' + esc('Q. '+question['question'])
+            errors = r'\newline '.join(esc(error) for error in question['erreurs'])
+            # A single longtable row cannot break across pages: keep each question together.
+            score = '' if student.get('grille_vierge') else fmt(float(question['points']))
+            lines.append(label+' & '+errors+' & '+score+'/'+fmt(float(question['maximum']))+r'\\')
+            previous_ex = question['exercice']
         lines += [r'\hline', r'\end{longtable}']
 
         checks = [str(x).strip() for x in student.get('a_verifier', []) if str(x).strip()]

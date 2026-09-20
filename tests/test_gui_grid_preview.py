@@ -25,7 +25,8 @@ class GridPreviewSourceTests(unittest.TestCase):
         )
         self.assertTrue(source.startswith('% SmartCorrection: paired-a6-v1'))
         self.assertIn('paperwidth=105mm,paperheight=148mm', source)
-        self.assertIn('Isoler x', source)
+        self.assertIn('Q. 1', source)
+        self.assertNotIn('Isoler x', source)
         self.assertIn('/2', source)
         self.assertNotIn('0/2', source)
         self.assertNotIn('Aucun conseil enregistré.', source)
@@ -48,8 +49,8 @@ class GridPreviewPdfTests(unittest.TestCase):
         self.assertAlmostEqual(float(first.mediabox.width), 210*72/25.4, places=2)
         self.assertAlmostEqual(float(first.mediabox.height), 148*72/25.4, places=2)
         text = '\n'.join(page.extract_text() for page in pdf.pages)
-        self.assertIn('Résoudre', text)
-        self.assertIn('Conclure', text)
+        self.assertIn('Bilan par question', text)
+        self.assertIn('Q. 1', text)
         self.assertIn('Le corrigé sera ajouté', text)
 
 

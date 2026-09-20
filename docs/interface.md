@@ -22,7 +22,7 @@ pas les formules. Sans LaTeX, les imports et les exports de sources `.tex` reste
 
 Par défaut, les fiches sont en **A5 paysage**, divisées en deux zones **A6 portrait** :
 correction à gauche, corrigé à droite. La fiche contient les identifiants locaux, les notes,
-un tableau **Question / Critère-erreur / Note** et les conseils facultatifs. Les formats,
+un tableau **Question / Erreurs / Note** et les conseils facultatifs. Les formats,
 colonnes du corrigé et assemblage se règlent dans l’interface. Les noms affichés localement
 ne sont jamais ajoutés aux consignes IA. L’ancienne option « Saut après correction », devenue
 sans effet avec le tableau compact, n’est plus proposée ; les réglages enregistrés restent compatibles.
@@ -351,3 +351,13 @@ et revient à la notation individuelle sur 20.
 Les deux zones restent visibles : **Consigne à copier dans l’IA**, avec **Copier** en dessous, et **Résultat de l’IA**. Après **Vérifier**, **Enregistrer et continuer** enregistre la grille, le corrigé ou l’inventaire et ouvre la suite. Les versions de corrigé manquantes sont proposées successivement.
 
 Pour les corrections, **Enregistrer les corrections** reste sur la page afin de relire les fiches ou d’importer une autre réponse. **Voir les fiches du test** ouvre le PDF ; passer à l’étape suivante valide ensuite l’échantillon. **Créer le PDF final** produit le rendu complet. Les sources LaTeX et les documents précédents sont dans **Plus d’options**.
+
+### Deux niveaux de grille
+
+La grille détaillée par item reste la référence pour l’IA, SQLite et les calculs. Le JSON
+de correction conserve chaque item et ses points. La fiche élève affiche un **bilan par question** :
+somme des points / barème de la question, puis seulement les erreurs des items ayant perdu des
+points. Les retours identiques sont affichés une seule fois par question ; les critères et les
+commentaires sur les items entièrement réussis ne sont pas répétés. Une question réussie
+conserve sa note, avec une case d’erreurs vide. Les données détaillées et les exports JSON
+restent inchangés ; les totaux des questions ne recalculent pas la note finale.

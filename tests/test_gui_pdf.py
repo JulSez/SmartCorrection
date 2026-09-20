@@ -123,7 +123,7 @@ class GuiPdfTests(unittest.TestCase):
             with self.subTest(items=count, reference_paragraphs=paragraphs):
                 student = dict(data['fiches'][0])
                 student['items'] = [dict(student['items'][0], question=str(i+1),
-                    description=f'CRITERE{i:03d} - Résoudre et justifier.',
+                    description=f'CRITERE{i:03d} - Résoudre et justifier.', points_obtenus=0,
                     commentaire=f'RETOUR{i:03d} - Vérifier le signe.') for i in range(count)]
                 student['conseils'] = [{'texte': 'FINCONSEILS - Relire chaque étape.'}]
                 student['corrige_latex'] = '\n\n'.join(
@@ -134,8 +134,7 @@ class GuiPdfTests(unittest.TestCase):
                 pdf = PdfReader(compile_pdf(tex))
                 self.assertGreater(len(pdf.pages), 1)
                 all_text = '\n'.join(page.extract_text() for page in pdf.pages)
-                for marker in [*(f'CRITERE{i:03d}' for i in range(count)),
-                               *(f'RETOUR{i:03d}' for i in range(count)),
+                for marker in [*(f'RETOUR{i:03d}' for i in range(count)),
                                *(f'REFERENCE{i:03d}' for i in range(paragraphs)), 'FINCONSEILS', 'FINCORRIGE']:
                     self.assertEqual(all_text.count(marker), 1, marker)
                 for page in pdf.pages:
