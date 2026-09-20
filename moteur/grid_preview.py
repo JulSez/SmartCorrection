@@ -22,8 +22,9 @@ _BLANK = _BlankScore()
 
 
 def blank_sheet_source(subject, cfg, version, items):
-    """Build the exact correction layout with criteria present and grading fields empty."""
+    """Build the exact correction layout with question totals and grading fields empty."""
     student = {
+        'grille_vierge': True,
         'numero': None,
         'label': '........................................................',
         'version': version or 'Commune',

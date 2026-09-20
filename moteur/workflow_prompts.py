@@ -41,8 +41,9 @@ def _grid(state):
 
 def _marking_rules():
     return ('Chaque item apparaît exactement une fois. Une perte de points exige une erreur courte dans commentaire ou annotation ; '
-            'ne répète ni le critère ni le corrigé. La fiche élève regroupe ensuite les items par question : évite donc les commentaires redondants entre items d’une même question. '
-            'Une erreur doit tenir en quelques mots. Conseils et annotations sont facultatifs ; un conseil seulement s’il ajoute quelque chose. '
+            'La fiche élève regroupe les points par question et affiche seulement les erreurs des items avec perte de points. '
+            'Garde pourtant tous les items dans le JSON ; ne fusionne jamais leurs codes ou leurs points. '
+            'Ne répète ni le critère ni le corrigé. Évite les commentaires redondants entre items d’une même question. Une erreur doit tenir en quelques mots. Conseils et annotations sont facultatifs ; un conseil seulement s’il ajoute quelque chose. '
             'Tous ces champs sont du texte brut, pas du LaTeX.\n'
             'Si une copie est impossible à corriger sans deviner : mets-la uniquement dans a_revoir. '
             'a_verifier signale une incertitude non bloquante sur une correction complète.\n'+describe())

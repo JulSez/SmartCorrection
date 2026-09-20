@@ -25,7 +25,7 @@ Les consignes générales et de classe peuvent être réécrites en fin de corre
 
 **LaTeX reste le moteur de rendu mathématique.** `pypdf` assemble les PDF.
 Le format par défaut est A5 paysage : fiche de correction à gauche, corrigé à droite, en deux
-zones A6 portrait. La fiche regroupe les critères, points et retours dans un tableau compact,
+zones A6 portrait. La fiche regroupe les points et les erreurs par question dans un tableau compact,
 avec des conseils facultatifs. Les formats et l’assemblage sont configurables.
 La note est individuelle sur 20 par défaut. L’option Maths expertes ajoute individuel /15 +
 moyenne des autres camarades /5 ; les identités et groupes restent locaux.
@@ -182,3 +182,13 @@ le PDF original n'est pas encore implémentée. La proposition automatique de gr
 à un fournisseur IA restent hors du pipeline déterministe. La validation sur une vraie
 évaluation nécessite de fournir le sujet, son corrigé et les copies réelles (ainsi que les groupes
 si le parcours CLI les utilise).
+
+### Deux niveaux de grille
+
+La grille détaillée par item reste la référence pour l’IA, SQLite et les calculs. Le JSON
+de correction conserve chaque item et ses points. La fiche élève affiche un **bilan par question** :
+somme des points / barème de la question, puis seulement les erreurs des items ayant perdu des
+points. Les retours identiques sont affichés une seule fois par question ; les critères et les
+commentaires sur les items entièrement réussis ne sont pas répétés. Une question réussie
+conserve sa note, avec une case d’erreurs vide. Les données détaillées et les exports JSON
+restent inchangés ; les totaux des questions ne recalculent pas la note finale.
