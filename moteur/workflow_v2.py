@@ -392,6 +392,15 @@ class WorkflowApplication(LegacyApplication):
                         writer.write(str(folder / 'corrections.pdf'))
                     finally:
                         writer.close()
+                    packet = conn.execute("SELECT chemin FROM ui_fichier WHERE dossier_id=? AND role='paquet'", (ident,)).fetchone()
+                    if packet:
+                        from .pdf_bundle import interleave_packet
+                        entries = []
+                        for row in result['notes']:
+                            name = f"eleve_{row['numero']:03d}" if row['numero'] is not None else f"copie_{row['copie_id']:04d}"
+                            pages = [] if row['statut']=='absent' else [p[0] for p in conn.execute('SELECT page FROM copie_page WHERE copie_id=? ORDER BY ordre', (row['copie_id'],))]
+                            entries.append((folder/(name+'.pdf'), pages))
+                        interleave_packet(packet['chemin'], sorted(entries, key=lambda e:e[0].name), folder/'copies-et-corrections.pdf')
                     _refresh_manifest(folder, result['sujet']['id'], True)
                 conn.execute('INSERT INTO ui_rendu(id,dossier_id,revision,final,chemin) VALUES(?,?,?,?,?)',
                              (rid, ident, dossier['revision'], int(final), str(folder)))

@@ -63,29 +63,42 @@ async function fastExchangeCommit(stage){
 function latestCalibrationRender(){
  const renders=(state.rendus||[]).filter(r=>!r.final&&r.pdf&&Boolean(r.valide));
  if(!renders.length)return '';
- const r=renders[0];
- return `<div class="card"><h2>Rendu du dernier lot</h2><object class="pdf-preview" type="application/pdf" data="/file?kind=rendu&id=${r.id}&name=corrections.pdf"></object><div class="actions"><a target="_blank" rel="noopener" href="/file?kind=rendu&id=${r.id}&name=corrections.pdf">Ouvrir le PDF ↗</a></div></div>`;
+ const r=renders[0],name=r.intercale?'copies-et-corrections.pdf':'corrections.pdf';
+ return `<div class="card"><h2>Rendu du dernier lot</h2><object class="pdf-preview" type="application/pdf" data="/file?kind=rendu&id=${r.id}&name=${name}"></object><div class="actions"><a target="_blank" rel="noopener" href="/file?kind=rendu&id=${r.id}&name=${name}">Ouvrir le PDF ↗</a></div></div>`;
+}
+function packetPanel(){
+ const packet=(state.fichiers||[]).find(f=>f.role==='paquet');
+ return packet?`<div class="card"><h2>PDF des copies</h2><p>${esc(packet.nom)} · ${packet.pages} pages</p><a target="_blank" rel="noopener" href="/file?kind=source&id=${packet.id}">Ouvrir le paquet ↗</a></div>`:
+ `<div class="card"><h2>PDF des copies</h2><p class="help">Importez le paquet pour afficher les pages des élèves avec leurs fiches. Joignez-le aussi séparément dans l’IA.</p><input type="file" id="packet-file" accept="application/pdf,.pdf"><button id="upload-packet">Importer le PDF des copies</button></div>`;
+}
+function bindPacket(){
+ const button=$('#upload-packet');if(!button)return;
+ button.onclick=()=>task(async()=>{
+  const file=$('#packet-file').files[0];if(!file)throw Error('Choisir le PDF des copies.');
+  await post({action:'upload',dossier:state.dossier.id,role:'paquet',nom:file.name,contenu:await fileBase64(file)});
+  state=await get('/api/dossier?id='+state.dossier.id);renderDossier();toast('PDF des copies importé.');
+ });
 }
 function renderBaremeFast(){
  $('#main').innerHTML=fastHeader('1. Barème','Discutez du barème avec l’IA. Quand il vous convient, l’IA fournit le JSON final à coller ici.')+
- layoutCard('setup')+
+ layoutCard('setup')+packetPanel()+
  `<div class="card"><h2>Documents côté IA</h2><p>Joignez directement dans la conversation IA : copies, sujet, corrigé éventuel et documents de cours. SmartCorrection ne les renvoie pas à l’IA.</p>${anonymityControl()}</div>`+
- fastExchange('bareme','Valider le barème')+
+ fastExchange('bareme','Valider et voir le barème')+
  (state.grille.length?`<div class="notice success">Barème validé — révision ${state.dossier.revision}.</div>`:'');
- bindLayout('setup');bindAnonymity();bindFastPrompt('bareme');
+ bindLayout('setup');bindPacket();bindAnonymity();bindFastPrompt('bareme');
  $('#fast-submit').onclick=()=>task(async()=>{try{
-   await fastExchangeCommit('bareme');state=await get('/api/dossier?id='+state.dossier.id);current=1;renderDossier();toast('Barème validé. Passage au calibrage.');
+   await fastExchangeCommit('bareme');state=await get('/api/dossier?id='+state.dossier.id);renderDossier();showGridPreviewV2();toast('Barème validé. Vérifiez le PDF, puis passez au calibrage.');
  }catch(e){$('#fast-error').innerHTML=`<div class="error">${esc(e.message)}</div>`;throw e;}});
 }
 function renderCalibrationFast(){
  const cal=state.calibrage||{}, selected=state.copies.filter(c=>c.echantillon).map(c=>c.reference);
  const pending=state.copies.filter(c=>c.statut==='present'&&!c.exclue_final&&(!c.correction_id||c.a_revoir));
  const mean=cal.moyenne_estimee==null?'—':cal.moyenne_estimee+'/20';
- $('#main').innerHTML=fastHeader('2. Calibrage','Même écran à chaque lot : JSON → rendu → problèmes → lot suivant, jusqu’à ce que la correction vous convienne.')+
+ $('#main').innerHTML=fastHeader('2. Calibrage','Même écran à chaque lot : JSON → rendu → lot suivant, jusqu’à ce que la correction vous convienne.')+
  `<div class="card"><div class="row"><div><strong>Lot</strong><br>${esc(selected.join(', ')||'Premier lot : 5 premières copies')}</div><div><strong>Moyenne estimée</strong><br>${esc(mean)}</div><div><strong>Copies restant à calibrer/corriger</strong><br>${pending.length}</div></div></div>`+
  fastExchange('calibrage','Importer le JSON et afficher le rendu')+
  latestCalibrationRender()+
- `<div class="card"><h2>Problèmes à corriger pour la suite</h2><p class="help">Barème mal appliqué, sévérité, erreurs de calcul, rédaction, symboles… Ces décisions sont cumulées. Les copies déjà corrigées seront marquées à reprendre pour appliquer les mêmes règles à tout le paquet.</p><textarea id="calibration-problems" placeholder="Ex. : sanctionner davantage les erreurs de calcul ; ne pas enlever deux fois pour la même erreur…"></textarea><div class="actions"><button id="next-batch">Lot suivant</button><button class="primary" id="approve-calibration">La correction me convient</button></div><div id="calibration-error"></div></div>`+
+ `<div class="actions"><button id="next-batch">Lot suivant</button></div><div id="calibration-error"></div>`+
  (state.pretraitement?assignmentPanel(state.pretraitement):'')+copyControls();
  bindFastPrompt('calibrage');bindAssignments();bindCopyControls();
  $('#fast-submit').onclick=()=>task(async()=>{try{
@@ -94,27 +107,14 @@ function renderCalibrationFast(){
    await post({action:'generer',dossier:state.dossier.id,final:false,pdf:true});
    state=await get('/api/dossier?id='+state.dossier.id);renderDossier();toast('Lot importé et rendu généré.');
  }catch(e){$('#fast-error').innerHTML=`<div class="error">${esc(e.message)}</div>`;throw e;}});
- async function saveProblems(){
-   const text=$('#calibration-problems').value.trim();
-   if(text){await post({action:'brouillon',dossier:state.dossier.id,etape:'calibrage-retours',texte:text});$('#calibration-problems').value='';return true;}
-   return false;
- }
  $('#next-batch').onclick=()=>task(async()=>{try{
-   await saveProblems();state=await get('/api/dossier?id='+state.dossier.id);
+   state=await get('/api/dossier?id='+state.dossier.id);
    const next=calibrationCandidates(state.copies);
-   if(!next.length)throw new Error('Aucune copie non corrigée restante. Validez le calibrage.');
+   if(!next.length)throw new Error('Aucune copie non corrigée restante. Passez à l’étape suivante.');
    await post({action:'echantillon',dossier:state.dossier.id,references:next,valider:false});
    state=await get('/api/dossier?id='+state.dossier.id);renderDossier();toast('Lot suivant prêt.');
  }catch(e){$('#calibration-error').innerHTML=`<div class="error">${esc(e.message)}</div>`;throw e;}});
- $('#approve-calibration').onclick=()=>task(async()=>{try{
-   const changed=await saveProblems();state=await get('/api/dossier?id='+state.dossier.id);
-   if(changed){renderDossier();toast('Ajustements enregistrés. Recopiez la consigne et importez le lot révisé avant de valider.');return;}
-   const refs=state.copies.filter(c=>c.echantillon&&!c.exclue_final).map(c=>c.reference);
-   if(!refs.length)throw new Error('Importez au moins un lot avant de valider le calibrage.');
-   if(refs.length!==state.copies.filter(c=>c.echantillon).length)await post({action:'echantillon',dossier:state.dossier.id,references:refs,valider:false});
-   await post({action:'echantillon',dossier:state.dossier.id,references:refs,valider:true});
-   state=await get('/api/dossier?id='+state.dossier.id);current=2;renderDossier();toast('Calibrage validé.');
- }catch(e){$('#calibration-error').innerHTML=`<div class="error">${esc(e.message)}</div>`;throw e;}});
+
 }
 function renderFullCorrectionFast(){
  const remaining=state.copies.filter(c=>c.statut==='present'&&!c.exclue_final&&(!c.correction_id||c.a_revoir));
@@ -156,10 +156,17 @@ goStep=async function(i){
  const next=Math.max(0,Math.min(3,i));
  await task(async()=>{
    await flushFastDraft();
-   const latest=await get('/api/dossier?id='+state.dossier.id);
+   let latest=await get('/api/dossier?id='+state.dossier.id);
    if(next>current){
     if(next>0&&!latest.grille.length)throw new Error('Validez d’abord le barème.');
-    if(next>1&&!latest.dossier.echantillon_valide)throw new Error('Validez d’abord le calibrage.');
+    if(next>1&&!latest.dossier.echantillon_valide){
+     const selected=latest.copies.filter(c=>c.echantillon);
+     const refs=selected.filter(c=>!c.exclue_final).map(c=>c.reference);
+     if(!refs.length)throw new Error('Importez au moins un lot avant de passer à la suite.');
+     if(refs.length!==selected.length)await post({action:'echantillon',dossier:latest.dossier.id,references:refs,valider:false});
+     await post({action:'echantillon',dossier:latest.dossier.id,references:refs,valider:true});
+     latest=await get('/api/dossier?id='+latest.dossier.id);
+    }
     if(next>2){
      const left=latest.copies.filter(c=>c.statut==='present'&&!c.exclue_final&&(!c.correction_id||c.a_revoir));
      if(left.length)throw new Error(`${left.length} copie(s) restent à corriger ou à revoir.`);

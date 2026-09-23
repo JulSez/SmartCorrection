@@ -8,8 +8,8 @@ const index = fs.readFileSync(path.join(__dirname, '../moteur/web/index.html'), 
 
 test('fast workflow exposes four teacher-facing stages', () => {
   for (const label of ['Barème','Calibrage','Correction complète','Résultats']) assert.match(source, new RegExp(label));
-  assert.match(source, /JSON → rendu → problèmes → lot suivant/);
-  assert.match(source, /La correction me convient/);
+  assert.match(source, /JSON → rendu → lot suivant/);
+  assert.doesNotMatch(source, /approve-calibration|La correction me convient/);
 });
 
 test('fast workflow is loaded after legacy patches', () => {
@@ -20,5 +20,5 @@ test('calibration imports one JSON then advances by five', () => {
   assert.match(source, /fastExchangeCommit\('calibrage'\)/);
   assert.match(source, /slice\(0,5\)/);
   assert.match(source, /moyenne_estimee/);
-  assert.match(source, /calibrage-retours/);
+  assert.doesNotMatch(source, /calibration-problems/);
 });

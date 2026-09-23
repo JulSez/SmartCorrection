@@ -126,12 +126,24 @@ class Application:
                     q.numero question,e.numero exercice,v.version FROM item i JOIN question q ON q.id=i.question_id
                     JOIN exercice e ON e.id=q.exercice_id JOIN grille g ON g.id=i.grille_id
                     LEFT JOIN version v ON v.id=g.version_id WHERE g.sujet_id=? ORDER BY g.id,e.ordre,q.ordre,i.ordre''', (dossier['sujet_id'],))]
-            return {'dossier': dict(dossier), 'groupes': group_state(conn,dossier), 'copies': self._copies(conn, dossier), 'grille': grids, 'versions': versions,
+            copies = self._copies(conn, dossier)
+            ready = [c['copie_id'] for c in copies if c['correction_id'] or c['statut']=='absent']
+            if ready:
+                calculated = calculate_selection(conn, dossier['sujet_id'], ready, allow_groups=True)
+                by_copy = {n['copie_id']:n for n in calculated['notes']}
+                from .notes import config_from_mapping
+                cfg = config_from_mapping(calculated['config'])
+                for c in copies:
+                    if c['copie_id'] in by_copy:
+                        n = by_copy[c['copie_id']]
+                        c.update({k:n.get(k) for k in ('note_individuelle','note_groupe','note_finale','etat_groupe')})
+                        c['note_max'] = cfg.note_finale_max
+            return {'dossier': dict(dossier), 'groupes': group_state(conn,dossier), 'copies': copies, 'grille': grids, 'versions': versions,
                     'eleves': [dict(r) for r in conn.execute('SELECT id,id numero,nom,prenom FROM eleve_par_classe WHERE classe=? ORDER BY id', (dossier['classe'],))],
                     'fichiers': [dict(r) for r in conn.execute('SELECT id,role,nom,pages FROM ui_fichier WHERE dossier_id=?', (ident,))],
                     'brouillons': {r['etape']: r['texte'] for r in conn.execute('SELECT * FROM ui_brouillon WHERE dossier_id=?', (ident,))},
                     'rendus': [dict(id=r['id'], revision=r['revision'], final=r['final'], valide=r['valide'],
-                                   cree_le=r['cree_le'], pdf=(Path(r['chemin'])/'corrections.pdf').is_file())
+                                   cree_le=r['cree_le'], intercale=(Path(r['chemin'])/'copies-et-corrections.pdf').is_file(), pdf=(Path(r['chemin'])/'corrections.pdf').is_file())
                                for r in conn.execute('SELECT * FROM ui_rendu WHERE dossier_id=? ORDER BY cree_le DESC,id DESC', (ident,))],
                     'consignes': {'generales': _policy(conn,'generale'), 'classe': _policy(conn,'classe',dossier['classe'])}}
 
@@ -181,12 +193,20 @@ class Application:
             self._dossier(conn, ident)
             if role == 'paquet' and conn.execute("SELECT 1 FROM ui_fichier WHERE dossier_id=? AND role='paquet'", (ident,)).fetchone():
                 raise ValueError('Le paquet est déjà enregistré. Créer un autre dossier pour un nouveau PDF.')
+            if role == 'paquet':
+                last_page = conn.execute('SELECT MAX(cp.page) FROM copie_page cp JOIN ui_copie u ON u.copie_id=cp.copie_id WHERE u.dossier_id=?', (ident,)).fetchone()[0]
+                if last_page and last_page > pages:
+                    raise ValueError('Le PDF ne contient pas toutes les pages déjà affectées aux copies')
             folder.mkdir(parents=True, exist_ok=True)
             path = folder/f'{fid}.pdf'
             path.write_bytes(raw)
             try:
                 conn.execute('INSERT INTO ui_fichier VALUES(?,?,?,?,?,?,?)',
                              (fid, ident, role, name, str(path), pages, hashlib.sha256(raw).hexdigest()))
+                if role == 'paquet':
+                    conn.execute('UPDATE copie SET pdf_path=? WHERE id IN (SELECT copie_id FROM ui_copie WHERE dossier_id=?)', (str(path),ident))
+                    conn.execute('UPDATE ui_rendu SET valide=0 WHERE dossier_id=?', (ident,))
+
             except Exception:
                 path.unlink(missing_ok=True)
                 raise

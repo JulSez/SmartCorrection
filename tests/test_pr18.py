@@ -23,7 +23,7 @@ class Pr18LayoutTests(unittest.TestCase):
 
     def test_full_layout_is_saved_and_propagated_to_prompt(self):
         layout = {
-            'correction': {'size': 'A6', 'orientation': 'portrait', 'pages': 1, 'newpage_after_correction': True},
+            'correction': {'size': 'A6', 'orientation': 'portrait', 'pages': 1, 'newpage_after_correction': True, 'grid_mode': 'questions'},
             'corrige': {'size': 'A5', 'orientation': 'paysage', 'pages': 2, 'columns': 2},
             'assembly': 'separe', 'print_format': 'A4',
         }

@@ -49,10 +49,14 @@ function assignmentPanel(prep){
   const currentText=current?studentLabel(current):'Non attribuée';
   return `<tr><td><strong>${esc(c.reference)}</strong><br><small>p. ${c.pages.join(', ')} · version ${esc(c.version)}</small></td><td>${esc(read)}</td><td><div class="student-search" data-reference="${esc(c.reference)}"><div class="student-current"><strong>${esc(currentText)}</strong>${current?'<button type="button" class="clear-student" title="Retirer l’affectation">×</button>':''}</div><input class="copy-student-search" type="search" autocomplete="off" placeholder="N° ou nom de l’élève…" aria-label="Rechercher un élève pour ${esc(c.reference)}"><div class="student-suggestions" hidden></div></div></td></tr>`;
  }).join('');
- return `<div class="card"><h3>Affectation locale des élèves</h3><p class="help">Une copie peut rester sans élève. Recherchez par numéro, nom ou prénom : par exemple <strong>Moh</strong> propose les élèves dont le nom ou le prénom commence par « Moh ». Cette liste reste locale et n’est pas envoyée à l’IA.</p><div class="table-wrap"><table><thead><tr><th>Copie</th><th>Identité lue par l’IA</th><th>Élève</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+ return `<div class="card"><h3>Affectation locale des élèves</h3><p class="help">Une copie peut rester sans élève. Recherchez par numéro, nom ou prénom : par exemple <strong>Moh</strong> propose les élèves dont le nom ou le prénom commence par « Moh ». Seuls les élèves non attribués sont proposés. Cette liste reste locale et n’est pas envoyée à l’IA.</p><div class="table-wrap"><table><thead><tr><th>Copie</th><th>Identité lue par l’IA</th><th>Élève</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+function availableAssignmentStudents(){
+ const copies=state.pretraitement?.copies??state.copies??[];
+ const assigned=new Set(copies.filter(c=>c.eleve_id!=null).map(c=>Number(c.eleve_id)));
+ return (state.eleves||[]).filter(s=>!assigned.has(Number(s.id)));
 }
 function bindAssignments(){
- const students=state.eleves||[];
  const assign=async(ref,value)=>{
   await post({action:'revue',dossier:state.dossier.id,reference:'@affectation:'+ref+':'+value});
   state=await get('/api/dossier?id='+state.dossier.id);
@@ -65,8 +69,8 @@ function bindAssignments(){
   const ref=box.dataset.reference;
   const renderSuggestions=()=>{
    const q=input.value.trim();
-   const matches=students.filter(s=>studentMatches(s,q)).slice(0,8);
-   suggestions.innerHTML=matches.length?matches.map(s=>`<button type="button" class="student-suggestion" data-id="${s.id}"><span>${esc(studentLabel(s))}</span></button>`).join(''):'<div class="help">Aucun élève trouvé.</div>';
+   const matches=availableAssignmentStudents().filter(s=>studentMatches(s,q)).slice(0,8);
+   suggestions.innerHTML=matches.length?matches.map(s=>`<button type="button" class="student-suggestion" data-id="${s.id}"><span>${esc(studentLabel(s))}</span></button>`).join(''):'<div class="help">Aucun élève disponible pour cette recherche.</div>';
    suggestions.hidden=false;
    suggestions.querySelectorAll('.student-suggestion').forEach(button=>button.onclick=()=>task(()=>assign(ref,button.dataset.id)));
   };

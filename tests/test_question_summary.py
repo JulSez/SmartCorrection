@@ -38,6 +38,8 @@ class QuestionSummaryTests(unittest.TestCase):
         self.assertEqual(student, original)
         source = render_student(student, {'titre':'Test','classe':'TEST'}, config())
         self.assertNotIn('Critère machine', source)
+        self.assertIn(r'\fcolorbox{SCblue}{white}', source)
+        self.assertIn(r'\fontsize{14}{17}', source)
         self.assertNotIn('Bravo', source)
         self.assertEqual(source.count('Q. 1'), 1)
         self.assertIn('0,625/1,25', source)
@@ -51,6 +53,41 @@ class QuestionSummaryTests(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         self.assertEqual(rows[0]['erreurs'], [])
         self.assertEqual(rows[1]['erreurs'], ['Erreur de signe.'])
+
+    def test_detailed_grid_hides_codes_and_rules(self):
+        from moteur.render import _GRID_MODE
+        student = fixture()
+        for item in student['items']:
+            item.update(exercice_titre='Équations', question_texte='Résoudre', regle_correction='SECRET_MACHINE')
+        token = _GRID_MODE.set('detaillee')
+        try:
+            source = render_student(student, {'titre':'Test','classe':'TEST'}, config())
+        finally:
+            _GRID_MODE.reset(token)
+        self.assertIn('Équations', source)
+        self.assertIn('Résoudre', source)
+        self.assertIn('Critère machine', source)
+        self.assertNotIn('Q1I0', source)
+        self.assertNotIn('SECRET_MACHINE', source)
+        self.assertNotIn('Bravo', source)
+
+    def test_layout_mode_persists_and_reaches_exports(self):
+        import test_gui
+        case = test_gui.GuiWorkflowTests(); case.setUp(); self.addCleanup(case.doCleanups)
+        case.pilot()
+        from moteur.workflow_v2 import WorkflowApplication
+        case.app = WorkflowApplication(case.root/'db.sqlite', case.root/'data', case.root/'legacy')
+        layout = case.app.state(case.ident)['layout']
+        self.assertEqual(layout['correction']['grid_mode'], 'questions')
+        layout['correction']['grid_mode'] = 'detaillee'
+        case.app.save_layout(case.ident, layout)
+        result = case.app.generate(case.ident, pdf=False)
+        tex = next(name for name in result['fichiers'] if name.endswith('.tex') and name != 'notes.tex')
+        self.assertIn('Grille détaillée', case.app.file('rendu', result['id'], tex).read_text())
+        self.assertEqual(case.app.state(case.ident)['layout']['correction']['grid_mode'], 'detaillee')
+        layout['correction']['grid_mode'] = 'invalide'
+        with self.assertRaises(ValueError):
+            case.app.save_layout(case.ident, layout)
 
     @unittest.skipUnless(os.environ.get('SMARTCORRECTION_TEST_PDF') == '1', 'real PDF integration')
     def test_six_questions_fit_on_one_a6_panel(self):

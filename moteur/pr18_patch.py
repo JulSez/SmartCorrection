@@ -24,7 +24,7 @@ LOREM = (r'\section*{Exemple} Lorem ipsum dolor sit amet, consectetur adipiscing
          r'\[x^2=5\iff x=\pm\sqrt5\]')
 
 _DEFAULT_LAYOUT = {
-    'correction': {'size': 'A6', 'orientation': 'portrait', 'pages': 1, 'newpage_after_correction': True},
+    'correction': {'size': 'A6', 'orientation': 'portrait', 'pages': 1, 'newpage_after_correction': True, 'grid_mode': 'questions'},
     'corrige': {'size': 'A6', 'orientation': 'portrait', 'pages': 1, 'columns': 1},
     'assembly': 'cote-a-cote',
     'print_format': 'auto',
@@ -69,6 +69,10 @@ def _validate_layout(layout):
         if pages < 1 or pages > 8:
             raise ValueError('Nombre de pages attendu : 1 à 8')
         item['pages'] = pages
+    mode = layout['correction'].get('grid_mode', 'questions')
+    if mode not in ('questions', 'detaillee'):
+        raise ValueError('Grille attendue : par question ou détaillée')
+    layout['correction']['grid_mode'] = mode
     page_break = layout['correction'].get('newpage_after_correction', True)
     if type(page_break) is not bool:
         raise ValueError('Saut de page après correction : booléen attendu')
@@ -182,9 +186,11 @@ def _layout_renderer(layout):
     base = workflow.render_student
     def render(student, subject, cfg):
         token = render_module._CORRECTION_PAGE_BREAK.set(layout['correction'].get('newpage_after_correction', True))
+        grid_token = render_module._GRID_MODE.set(layout['correction']['grid_mode'])
         try:
             return _apply_source_layout(base(student, subject, cfg), layout)
         finally:
+            render_module._GRID_MODE.reset(grid_token)
             render_module._CORRECTION_PAGE_BREAK.reset(token)
     old = workflow.render_student
     workflow.render_student = render
@@ -221,7 +227,7 @@ def _progressive_preview(self, ident, stage):
                 LEFT JOIN version v ON v.id=g.version_id
                 LEFT JOIN corrige co ON co.version_id=COALESCE(g.version_id,(SELECT id FROM version WHERE sujet_id=g.sujet_id ORDER BY id LIMIT 1))
                 WHERE g.sujet_id=? ORDER BY g.id''', (dossier['sujet_id'],)):
-                items = [dict(row) for row in conn.execute('''SELECT e.numero exercice,q.numero question,i.description,i.bareme_max
+                items = [dict(row) for row in conn.execute('''SELECT e.numero exercice,e.titre exercice_titre,q.numero question,q.texte question_texte,i.description,i.bareme_max
                     FROM item i JOIN question q ON q.id=i.question_id JOIN exercice e ON e.id=q.exercice_id
                     WHERE i.grille_id=? ORDER BY e.ordre,q.ordre,i.ordre,i.id''', (grid['id'],))]
                 entries.append((grid['version'] or 'Commune', grid['str_latex'] or LOREM, items))
@@ -246,9 +252,11 @@ def _generate(self, ident, final=False, pdf=True):
     with database(self.db_path) as conn:
         layout = _layout(conn, ident)
     token = render_module._CORRECTION_PAGE_BREAK.set(layout['correction'].get('newpage_after_correction', True))
+    grid_token = render_module._GRID_MODE.set(layout['correction']['grid_mode'])
     try:
         return _BASE_GENERATE(self, ident, final=final, pdf=pdf)
     finally:
+        render_module._GRID_MODE.reset(grid_token)
         render_module._CORRECTION_PAGE_BREAK.reset(token)
 
 WorkflowApplication.generate = _generate
