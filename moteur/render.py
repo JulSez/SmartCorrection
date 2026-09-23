@@ -16,6 +16,8 @@ from decimal import Decimal
 from .notes import config_from_mapping
 
 
+_GRID_MODE = ContextVar('smartcorrection_grid_mode', default='questions')
+
 _CORRECTION_PAGE_BREAK = ContextVar('smartcorrection_page_break_after_correction', default=True)
 
 _MATH_SYMBOLS = {
@@ -123,7 +125,7 @@ def build_student_data(conn, result, row):
         data['commentaire_global'] = conn.execute('SELECT commentaire_global FROM correction WHERE id=?', (cid,)).fetchone()[0]
         data['a_verifier'] = [r['texte'] for r in conn.execute('SELECT texte FROM ui_verification WHERE copie_id=? ORDER BY ordre', (row['copie_id'],))]
         data['items'] = [dict(r) for r in conn.execute('''SELECT i.code,i.description,i.bareme_max,
-            e.numero exercice,q.numero question,q.texte question_texte,ci.points_obtenus,ci.statut,ci.commentaire,ci.annotation
+            e.numero exercice,e.titre exercice_titre,q.numero question,q.texte question_texte,ci.points_obtenus,ci.statut,ci.commentaire,ci.annotation
             FROM correction_item ci JOIN item i ON i.id=ci.item_id JOIN question q ON q.id=i.question_id
             JOIN exercice e ON e.id=q.exercice_id WHERE ci.correction_id=? ORDER BY e.ordre,q.ordre,i.ordre,i.id''', (cid,))]
         for table in ('annotations', 'conseils'):
@@ -154,6 +156,35 @@ def question_summary(student):
                 if text and text not in row['erreurs']:
                     row['erreurs'].append(text)
     return list(questions.values())
+
+
+def detailed_grid(student):
+    """Three visible levels. Technical codes and correction rules never render."""
+    esc = latex_escape_plain_text
+    groups = {}
+    for item in student.get('items', []):
+        groups.setdefault((str(item.get('exercice', '?')), str(item.get('question', '?'))), []).append(item)
+    lines = [r'\section*{Grille détaillée}', r'\renewcommand{\arraystretch}{1.15}',
+             r'\setlength{\LTpre}{0pt}\setlength{\LTpost}{2pt}',
+             r'\begin{longtable}{@{}p{.78\linewidth}>{\centering\arraybackslash}p{.18\linewidth}@{}}']
+    previous_ex = None
+    for (ex, q), items in groups.items():
+        first = items[0]
+        if ex != previous_ex:
+            title = first.get('exercice_titre') or 'Exercice '+ex
+            lines.append(r'\multicolumn{2}{@{}p{.98\linewidth}@{}}{\color{SCblue}\bfseries '+esc(title)+r'}\\*')
+        title = first.get('question_texte') or 'Question '+q
+        lines.append(r'\textbf{'+esc(title)+r'} & \\*')
+        for index, item in enumerate(items):
+            row = question_summary(dict(student, items=[item]))[0]
+            content = r'\hspace*{3mm}'+esc(item.get('description') or '')
+            if row['erreurs']:
+                content += r'\newline {\scriptsize\itshape '+esc(' ; '.join(row['erreurs']))+'}'
+            points = '' if student.get('grille_vierge') else fmt(float(row['points']))
+            lines.append(content+' & '+points+'/'+fmt(float(row['maximum']))+r'\\')
+        lines.append(r'\hline')
+        previous_ex = ex
+    return lines + [r'\end{longtable}']
 
 
 def render_student(student, subject, cfg):
@@ -209,22 +240,25 @@ def render_student(student, subject, cfg):
     if student.get('statut') == 'absent':
         lines += [r'\textbf{Absence déclarée.}']
     else:
-        lines += [r'\section*{Bilan par question}',
-                  r'\renewcommand{\arraystretch}{1.15}',
-                  r'\setlength{\LTpre}{0pt}\setlength{\LTpost}{2pt}',
-                  r'\begin{longtable}{@{}>{\raggedright\arraybackslash}p{.20\linewidth}>{\raggedright\arraybackslash}p{.58\linewidth}>{\centering\arraybackslash}p{.18\linewidth}@{}}',
-                  r'\small\textcolor{SCblue}{\textbf{Question}} & \small\textcolor{SCblue}{\textbf{Erreurs}} & \small\textcolor{SCblue}{\textbf{Note}}\\\noalign{\hrule height .8pt}\endhead']
-        previous_ex = None
-        for index, question in enumerate(question_summary(student)):
-            if index:
-                lines.append(r'\noalign{\hrule height 1.2pt}' if question['exercice'] != previous_ex else r'\hline')
-            label = esc('Ex. '+question['exercice']) + r'\newline ' + esc('Q. '+question['question'])
-            errors = r'\newline '.join(esc(error) for error in question['erreurs'])
-            # A single longtable row cannot break across pages: keep each question together.
-            score = '' if student.get('grille_vierge') else fmt(float(question['points']))
-            lines.append(label+' & '+errors+' & '+score+'/'+fmt(float(question['maximum']))+r'\\')
-            previous_ex = question['exercice']
-        lines += [r'\hline', r'\end{longtable}']
+        if _GRID_MODE.get() == 'detaillee':
+            lines += detailed_grid(student)
+        else:
+            lines += [r'\section*{Bilan par question}',
+                      r'\renewcommand{\arraystretch}{1.15}',
+                      r'\setlength{\LTpre}{0pt}\setlength{\LTpost}{2pt}',
+                      r'\begin{longtable}{@{}>{\raggedright\arraybackslash}p{.20\linewidth}>{\raggedright\arraybackslash}p{.58\linewidth}>{\centering\arraybackslash}p{.18\linewidth}@{}}',
+                      r'\small\textcolor{SCblue}{\textbf{Question}} & \small\textcolor{SCblue}{\textbf{Erreurs}} & \small\textcolor{SCblue}{\textbf{Note}}\\\noalign{\hrule height .8pt}\endhead']
+            previous_ex = None
+            for index, question in enumerate(question_summary(student)):
+                if index:
+                    lines.append(r'\noalign{\hrule height 1.2pt}' if question['exercice'] != previous_ex else r'\hline')
+                label = esc('Ex. '+question['exercice']) + r'\newline ' + esc('Q. '+question['question'])
+                errors = r'\newline '.join(esc(error) for error in question['erreurs'])
+                # A single longtable row cannot break across pages: keep each question together.
+                score = '' if student.get('grille_vierge') else fmt(float(question['points']))
+                lines.append(label+' & '+errors+' & '+score+'/'+fmt(float(question['maximum']))+r'\\')
+                previous_ex = question['exercice']
+            lines += [r'\hline', r'\end{longtable}']
 
         checks = [str(x).strip() for x in student.get('a_verifier', []) if str(x).strip()]
         if checks:

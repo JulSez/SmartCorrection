@@ -82,7 +82,7 @@ et les références inchangées. La moyenne estimée est indicative, jamais une 
 
 Les ajustements se discutent directement dans la conversation IA, puis les corrections révisées
 sont importées dans l’application. Il n’y a plus de zone « Problèmes à corriger » dans le calibrage.
-Le bouton « La correction me convient » valide le lot courant après les contrôles habituels.
+Passer à « Correction complète » valide le lot courant après les contrôles habituels ; aucun bouton de validation séparé.
 Les anciennes remarques déjà enregistrées restent conservées dans les dossiers.
 La correction complète peut être importée en plusieurs réponses contenant des **copies complètes**.
 Une copie illisible peut être déclarée dans `a_revoir`, sans inventer de points.
@@ -370,3 +370,20 @@ Les suggestions d’affectation proposent uniquement les élèves non encore att
 Retirer une affectation remet l’élève dans la liste. L’identité actuellement affectée reste affichée.
 Dans le PDF, la note est agrandie à 14 points et entourée d’un cadre bleu. La mention
 « Note provisoire » reste visible lorsque des vérifications sont nécessaires.
+
+### Choix de grille et copies originales
+
+Dans la mise en page, choisir « Grille par question » (par défaut) ou « Grille détaillée ».
+Le second mode affiche le titre d’exercice, celui de la question et les libellés des items,
+avec des polices et retraits distincts. Les codes et règles internes ne sont jamais imprimés.
+Changer ce réglage marque les PDF à régénérer, sans changer la correction enregistrée.
+
+Le tableau des copies incluses affiche leurs notes actuelles, calculées localement ; une copie
+non corrigée reste sans note. Les absences et notes de groupe en attente sont signalées.
+
+Importer le PDF du paquet sur le premier écran. En calibrage, l’aperçu intercale les pages de
+chaque copie avec sa fiche de correction. Sans PDF importé, seules les fiches sont affichées.
+À la fin, deux téléchargements sont proposés si le paquet est disponible : « Corrections seules »
+et « Copies et corrections intercalées ». Les pages conservent leur taille d’origine ; une fiche
+A5 et une copie A4 peuvent donc coexister. Seules les copies sélectionnées sont intercalées,
+sans pages ignorées ; les absences ont une fiche sans pages de copie.

@@ -47,17 +47,19 @@ test('active lot selection ignores excluded copies and includes previous copies 
  assert.match(h.run('copyControls()'),/id="groups-active" checked/);
 });
 
-test('calibration approval works without a problems block',async()=>{
- const h=harness(),calls=[];
- h.run(`bindFastPrompt=()=>{};bindAssignments=()=>{};bindCopyControls=()=>{};renderDossier=()=>{};
- state.copies=[{reference:'C001',statut:'present',pages:[1],echantillon:1,correction_id:1}];
- get=async()=>state;post=async data=>record(data);current=1;renderCalibrationFast();`);
- h.context.record=x=>calls.push(JSON.parse(JSON.stringify(x)));
- assert.doesNotMatch(h.node('#main').innerHTML,/calibration-problems|Problèmes à corriger/);
- await h.node('#approve-calibration').onclick();
- assert.deepEqual(calls.map(c=>c.action),['echantillon']);
- assert.equal(calls[0].valider,true);
- assert.equal(h.run('current'),2);
+test('forward navigation validates calibration; refusal stays on the current screen',async()=>{
+ for(const fail of [false,true]){
+  const h=harness(), calls=[];
+  h.context.record=x=>calls.push(x);h.context.fail=fail;
+  h.run(`renderDossier=()=>{};state.grille=[{}];state.copies=[{reference:'C001',echantillon:1,statut:'present'}];
+   get=async()=>state;post=async data=>{record(data);if(fail)throw Error('Copie à revoir');state.dossier.echantillon_valide=true};current=1;`);
+  await h.run('goStep(2)');
+  assert.equal(calls.length,1);assert.equal(calls[0].valider,true);
+  assert.equal(h.run('current'),fail?1:2);
+  if(fail)assert.match(h.node('#toast').textContent,/Copie à revoir/);
+ }
+ const h=harness();h.run('renderDossier=()=>{};get=async()=>state;post=async()=>{throw Error("Unexpected validation")};current=1');
+ await h.run('goStep(0)');assert.equal(h.run('current'),0);
 });
 
 test('partial full import is successful and keeps remaining copies visible',async()=>{
@@ -100,4 +102,35 @@ test('assignment suggestions exclude assigned IDs and release them after unassig
  assert.match(suggestions.innerHTML,/data-id="1"/);
  h.run('state.pretraitement.copies[1].eleve_id=2');input.oninput();
  assert.doesNotMatch(suggestions.innerHTML,/data-id="2"/);
+});
+
+test('layout offers explicit question and detailed grid modes and saves the choice',()=>{
+ const h=harness();
+ h.run("state.layout=currentLayout();state.layout.correction.grid_mode='detaillee'");
+ const html=h.run('layoutCard()');
+ assert.match(html,/value="detaillee" selected>Grille détaillée/);
+ assert.match(html,/Grille par question/);
+ h.node('#l-grid-mode').value='detaillee';
+ assert.equal(h.run('layoutPayload().correction.grid_mode'),'detaillee');
+});
+
+test('copy grades distinguish zero, missing, absence, pending groups and review',()=>{
+ const h=harness();
+ assert.equal(h.run("copyGrade({statut:'present',correction_id:1,note_finale:0,note_max:20})"),'0/20');
+ assert.equal(h.run("copyGrade({statut:'present'})"),'—');
+ assert.equal(h.run("copyGrade({statut:'absent'})"),'ABS');
+ assert.match(h.run("copyGrade({statut:'present',correction_id:1,etat_groupe:'En attente des camarades'})"),/En attente/);
+ assert.match(h.run("copyGrade({statut:'present',correction_id:1,note_finale:12.5,a_revoir:'Revoir'})"),/12,5\/20.*Provisoire/);
+});
+
+test('packet upload and interleaved downloads appear on active screens',()=>{
+ const h=harness();
+ assert.match(h.run('packetPanel()'),/Importer le PDF des copies/);
+ h.run("state.fichiers=[{id:'packet',role:'paquet',nom:'Copies.pdf',pages:8}]");
+ assert.doesNotMatch(h.run('packetPanel()'),/upload-packet/);
+ h.run("state.rendus=[{id:'render',pdf:true,valide:1,intercale:true,final:false}]");
+ assert.match(h.run('latestCalibrationRender()'),/name=copies-et-corrections.pdf/);
+ h.run("state.rendus[0].final=true;loadFinalNotes=()=>{};renderFinalV2()");
+ assert.match(h.node('#main').innerHTML,/Corrections seules/);
+ assert.match(h.node('#main').innerHTML,/Copies et corrections intercalées/);
 });

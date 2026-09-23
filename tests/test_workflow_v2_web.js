@@ -47,6 +47,6 @@ test('preview overlays are loaded in dependency order', () => {
 test('fast workflow is loaded last and collapses the UI to four stages', () => {
   assert.ok(index.indexOf('/hotfix-pr20.js') < index.indexOf('/fast-workflow.js'));
   for (const label of ['Barème','Calibrage','Correction complète','Résultats']) assert.match(fast, new RegExp(label));
-  assert.match(fast, /La correction me convient/);
+  assert.doesNotMatch(fast, /La correction me convient/);
   assert.match(fast, /slice\(0,5\)/);
 });
