@@ -191,7 +191,9 @@ def render_student(student, subject, cfg):
         r'\begin{tabular}{@{}p{.34\linewidth}p{.39\linewidth}p{.23\linewidth}@{}}',
         r'\textbf{' + title + '} & ' + r'\textbf{' + esc(label) + '} & ' + r'\textbf{' + esc(subject.get('classe') or '') + r'}\\',
         r'\end{tabular}\par',
-        r'\textbf{' + ('Note provisoire :' if student.get('a_verifier') else 'Note :') + '} ' + ('--' if student.get('note_finale') is None else fmt(student['note_finale'])) + '/' + fmt(cfg.note_finale_max) + r'\par',
+        r'{\setlength{\fboxsep}{5pt}\setlength{\fboxrule}{.8pt}'
+        r'\fcolorbox{SCblue}{white}{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{\centering\fontsize{14}{17}\selectfont\bfseries ' +
+        r'\textbf{' + ('Note provisoire :' if student.get('a_verifier') else 'Note :') + '} ' + ('--' if student.get('note_finale') is None else fmt(student['note_finale'])) + '/' + fmt(cfg.note_finale_max) + r'}}}\par',
     ]
     if not individual_only:
         def score(value):

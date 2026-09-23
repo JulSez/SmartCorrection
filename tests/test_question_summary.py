@@ -38,6 +38,8 @@ class QuestionSummaryTests(unittest.TestCase):
         self.assertEqual(student, original)
         source = render_student(student, {'titre':'Test','classe':'TEST'}, config())
         self.assertNotIn('Critère machine', source)
+        self.assertIn(r'\fcolorbox{SCblue}{white}', source)
+        self.assertIn(r'\fontsize{14}{17}', source)
         self.assertNotIn('Bravo', source)
         self.assertEqual(source.count('Q. 1'), 1)
         self.assertIn('0,625/1,25', source)

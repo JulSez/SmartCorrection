@@ -69,8 +69,8 @@ Les classes, dossiers, réponses en cours, documents générés et consignes sur
 
 | Écran | Action | Résultat |
 |---|---|---|
-| Barème | Joindre les documents dans l’IA, discuter du barème, coller son JSON | Grille validée |
-| Calibrage | Importer le premier JSON complet, lire les fiches, noter les ajustements, essayer le lot suivant | Inventaire, corrigés de référence, corrections d’essai |
+| Barème | Joindre les documents dans l’IA, discuter du barème, coller son JSON et cliquer sur « Valider et voir le barème » | Grille validée et PDF affiché |
+| Calibrage | Importer le premier JSON complet, lire les fiches, discuter des ajustements dans l’IA, essayer le lot suivant | Inventaire, corrigés de référence, corrections d’essai |
 | Correction complète | Copier la consigne actualisée et importer les réponses | Corrections de toutes les copies incluses |
 | Résultats | Générer les documents, puis préparer les consignes de la prochaine fois | PDF, notes CSV, consignes enregistrées |
 
@@ -80,10 +80,10 @@ Le premier JSON de calibrage contient l’inventaire complet, les corrigés de t
 jusqu’à cinq corrections et une moyenne estimée. Les suivants omettent l’inventaire enregistré
 et les références inchangées. La moyenne estimée est indicative, jamais une note cible.
 
-Les remarques de calibrage sont cumulées et marquent les copies déjà corrigées **à revoir**.
-Les points enregistrés ne sont pas effacés. Réimporter les corrections ou les confirmer après
-vérification dans « Copies incluses et points à revoir ». Cliquer sur « La correction me convient »
-avec de nouvelles remarques les enregistre, mais exige de revoir le lot avant de valider.
+Les ajustements se discutent directement dans la conversation IA, puis les corrections révisées
+sont importées dans l’application. Il n’y a plus de zone « Problèmes à corriger » dans le calibrage.
+Le bouton « La correction me convient » valide le lot courant après les contrôles habituels.
+Les anciennes remarques déjà enregistrées restent conservées dans les dossiers.
 La correction complète peut être importée en plusieurs réponses contenant des **copies complètes**.
 Une copie illisible peut être déclarée dans `a_revoir`, sans inventer de points.
 
@@ -361,3 +361,12 @@ points. Les retours identiques sont affichés une seule fois par question ; les 
 commentaires sur les items entièrement réussis ne sont pas répétés. Une question réussie
 conserve sa note, avec une case d’erreurs vide. Les données détaillées et les exports JSON
 restent inchangés ; les totaux des questions ne recalculent pas la note finale.
+
+### Validation, affectations et note
+
+« Valider et voir le barème » enregistre le barème et ouvre immédiatement son aperçu PDF.
+L’écran 1 reste affiché ; passer ensuite au calibrage avec « Étape suivante ».
+Les suggestions d’affectation proposent uniquement les élèves non encore attribués dans le dossier.
+Retirer une affectation remet l’élève dans la liste. L’identité actuellement affectée reste affichée.
+Dans le PDF, la note est agrandie à 14 points et entourée d’un cadre bleu. La mention
+« Note provisoire » reste visible lorsque des vérifications sont nécessaires.

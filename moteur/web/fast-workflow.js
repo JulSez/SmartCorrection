@@ -70,11 +70,11 @@ function renderBaremeFast(){
  $('#main').innerHTML=fastHeader('1. Barème','Discutez du barème avec l’IA. Quand il vous convient, l’IA fournit le JSON final à coller ici.')+
  layoutCard('setup')+
  `<div class="card"><h2>Documents côté IA</h2><p>Joignez directement dans la conversation IA : copies, sujet, corrigé éventuel et documents de cours. SmartCorrection ne les renvoie pas à l’IA.</p>${anonymityControl()}</div>`+
- fastExchange('bareme','Valider le barème')+
+ fastExchange('bareme','Valider et voir le barème')+
  (state.grille.length?`<div class="notice success">Barème validé — révision ${state.dossier.revision}.</div>`:'');
  bindLayout('setup');bindAnonymity();bindFastPrompt('bareme');
  $('#fast-submit').onclick=()=>task(async()=>{try{
-   await fastExchangeCommit('bareme');state=await get('/api/dossier?id='+state.dossier.id);current=1;renderDossier();toast('Barème validé. Passage au calibrage.');
+   await fastExchangeCommit('bareme');state=await get('/api/dossier?id='+state.dossier.id);renderDossier();showGridPreviewV2();toast('Barème validé. Vérifiez le PDF, puis passez au calibrage.');
  }catch(e){$('#fast-error').innerHTML=`<div class="error">${esc(e.message)}</div>`;throw e;}});
 }
 function renderCalibrationFast(){
@@ -85,7 +85,7 @@ function renderCalibrationFast(){
  `<div class="card"><div class="row"><div><strong>Lot</strong><br>${esc(selected.join(', ')||'Premier lot : 5 premières copies')}</div><div><strong>Moyenne estimée</strong><br>${esc(mean)}</div><div><strong>Copies restant à calibrer/corriger</strong><br>${pending.length}</div></div></div>`+
  fastExchange('calibrage','Importer le JSON et afficher le rendu')+
  latestCalibrationRender()+
- `<div class="card"><h2>Problèmes à corriger pour la suite</h2><p class="help">Barème mal appliqué, sévérité, erreurs de calcul, rédaction, symboles… Ces décisions sont cumulées. Les copies déjà corrigées seront marquées à reprendre pour appliquer les mêmes règles à tout le paquet.</p><textarea id="calibration-problems" placeholder="Ex. : sanctionner davantage les erreurs de calcul ; ne pas enlever deux fois pour la même erreur…"></textarea><div class="actions"><button id="next-batch">Lot suivant</button><button class="primary" id="approve-calibration">La correction me convient</button></div><div id="calibration-error"></div></div>`+
+ `<div class="actions"><button id="next-batch">Lot suivant</button><button class="primary" id="approve-calibration">La correction me convient</button></div><div id="calibration-error"></div>`+
  (state.pretraitement?assignmentPanel(state.pretraitement):'')+copyControls();
  bindFastPrompt('calibrage');bindAssignments();bindCopyControls();
  $('#fast-submit').onclick=()=>task(async()=>{try{
@@ -94,21 +94,15 @@ function renderCalibrationFast(){
    await post({action:'generer',dossier:state.dossier.id,final:false,pdf:true});
    state=await get('/api/dossier?id='+state.dossier.id);renderDossier();toast('Lot importé et rendu généré.');
  }catch(e){$('#fast-error').innerHTML=`<div class="error">${esc(e.message)}</div>`;throw e;}});
- async function saveProblems(){
-   const text=$('#calibration-problems').value.trim();
-   if(text){await post({action:'brouillon',dossier:state.dossier.id,etape:'calibrage-retours',texte:text});$('#calibration-problems').value='';return true;}
-   return false;
- }
  $('#next-batch').onclick=()=>task(async()=>{try{
-   await saveProblems();state=await get('/api/dossier?id='+state.dossier.id);
+   state=await get('/api/dossier?id='+state.dossier.id);
    const next=calibrationCandidates(state.copies);
    if(!next.length)throw new Error('Aucune copie non corrigée restante. Validez le calibrage.');
    await post({action:'echantillon',dossier:state.dossier.id,references:next,valider:false});
    state=await get('/api/dossier?id='+state.dossier.id);renderDossier();toast('Lot suivant prêt.');
  }catch(e){$('#calibration-error').innerHTML=`<div class="error">${esc(e.message)}</div>`;throw e;}});
  $('#approve-calibration').onclick=()=>task(async()=>{try{
-   const changed=await saveProblems();state=await get('/api/dossier?id='+state.dossier.id);
-   if(changed){renderDossier();toast('Ajustements enregistrés. Recopiez la consigne et importez le lot révisé avant de valider.');return;}
+   state=await get('/api/dossier?id='+state.dossier.id);
    const refs=state.copies.filter(c=>c.echantillon&&!c.exclue_final).map(c=>c.reference);
    if(!refs.length)throw new Error('Importez au moins un lot avant de valider le calibrage.');
    if(refs.length!==state.copies.filter(c=>c.echantillon).length)await post({action:'echantillon',dossier:state.dossier.id,references:refs,valider:false});

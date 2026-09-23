@@ -20,5 +20,5 @@ test('calibration imports one JSON then advances by five', () => {
   assert.match(source, /fastExchangeCommit\('calibrage'\)/);
   assert.match(source, /slice\(0,5\)/);
   assert.match(source, /moyenne_estimee/);
-  assert.match(source, /calibrage-retours/);
+  assert.doesNotMatch(source, /calibration-problems/);
 });
