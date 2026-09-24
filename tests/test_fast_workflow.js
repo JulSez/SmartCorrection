@@ -134,3 +134,33 @@ test('packet upload and interleaved downloads appear on active screens',()=>{
  assert.match(h.node('#main').innerHTML,/Corrections seules/);
  assert.match(h.node('#main').innerHTML,/Copies et corrections intercalées/);
 });
+
+test('assessment actions confirm deletion and keep archives separate and reversible',async()=>{
+ const h=harness(),calls=[];
+ h.context.record=x=>calls.push(JSON.parse(JSON.stringify(x)));
+ h.run(`homeData={classes:[],latex:true,dossiers:[{id:'one',titre:'Actuelle',classe:'TEST'},{id:'two',titre:'Ancienne',classe:'TEST',archive:1}]};renderHome();showModal=html=>{document.querySelector('#modal-content').innerHTML=html};`);
+ assert.match(h.node('#main').innerHTML,/Archives \(1\)/);
+ assert.match(h.node('#main').innerHTML,/Désarchiver/);
+ h.node('#modal').close=()=>calls.push('closed');
+ h.run("post=async data=>{record(data);return {avertissements:[]}};loadHome=async()=>record('home');deleteDossierModal('one')");
+ assert.equal(calls.length,0);
+ assert.match(h.node('#modal-content').innerHTML,/Supprimer définitivement/);
+ await h.node('#confirm-delete').onclick();
+ assert.deepEqual(calls,[{action:'supprimer',dossier:'one',confirmer:true},'closed','home']);
+});
+
+test('instruction editor sends the loaded revision and selected class/type on replacement',async()=>{
+ const h=harness(),calls=[];
+ h.context.record=x=>calls.push(JSON.parse(JSON.stringify(x)));
+ h.run(`state=null;showModal=html=>{$('#modal').innerHTML=html;};task=async fn=>fn();toast=()=>{};
+ get=async url=>url==='/api/home'?{classes:[{classe:'TMEX'}]}:url.startsWith('/api/history')?[]:{generales:{id:null,texte:''},classe:{id:2,texte:'Classe'},type:{id:7,texte:'Ancien DST'},historique_type:[]};
+ post=async data=>{record(data);return {revision:8};};`);
+ h.node('#policy-class').value='TMEX';h.node('#policy-type').value='DST';h.node('#policy-scope').value='type';
+ await h.run('policiesModal()');
+ assert.match(h.node('#policy-editor').innerHTML,/Ancien DST/);
+ h.node('#policy-text').value='Nouvelle consigne';
+ await h.node('#save-policy').onclick();
+ assert.deepEqual(calls,[{action:'consigne',portee:'type',classe:'TMEX',type_epreuve:'DST',base:7,texte:'Nouvelle consigne'}]);
+ h.node('#policy-type').value='DM';h.node('#policy-type').oninput();
+ assert.doesNotMatch(h.node('#policy-editor').innerHTML,/save-policy/);
+});

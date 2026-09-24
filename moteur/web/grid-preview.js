@@ -13,7 +13,7 @@ showCorrigePreview=function(){
 
 showGridPreviewV2=function(){
  const url='/api/grid-preview?id='+encodeURIComponent(state.dossier.id)+'&revision='+encodeURIComponent(state.dossier.revision);
- showModal(`<div class="eyebrow">Grille enregistrée</div><h1>Correction vide + corrigé</h1><p class="lede">Vérifiez la densité réelle du document avant de traiter les copies.</p><div class="actions"><a href="${url}" target="_blank" rel="noopener">Ouvrir dans un onglet ↗</a></div>${pdfObject(url,'Aperçu de la feuille de correction et du corrigé')}`,true);
+ showModal(`<div class="eyebrow">Grille enregistrée</div><h1>Barème détaillé</h1><p class="lede">Vérifiez les exercices, questions, critères et points avant de traiter les copies. Le mode de la fiche élève reste inchangé.</p><div class="actions"><a href="${url}" target="_blank" rel="noopener">Ouvrir dans un onglet ↗</a></div>${pdfObject(url,'Aperçu de la feuille de correction et du corrigé')}`,true);
 };
 
 const submitResponseBeforePr17=submitResponse;

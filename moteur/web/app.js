@@ -15,15 +15,34 @@ $('#close-modal').onclick=()=>$('#modal').close();
 $('#home-button').onclick=()=>loadHome();
 $('.brand').onclick=e=>{e.preventDefault();loadHome();};
 async function loadHome(){state=null;$('#dossier-nav').innerHTML='';$('#breadcrumb').textContent='Mes évaluations';homeData=await get('/api/home');renderHome();}
+function dossierList(dossiers){
+ return `<div class="dossier-list">${dossiers.map(d=>`<div class="dossier-row"><div class="grow"><strong>${esc(d.titre)}</strong><small>${esc(d.classe)} · Grille ${d.revision||'à préparer'}</small></div><span class="badge ${d.termine?'ok':''}">${d.termine?'Document final disponible':'En cours'}</span><button data-open="${esc(d.id)}">${d.archive?'Ouvrir':'Reprendre →'}</button><details><summary>Actions</summary><button data-archive="${esc(d.id)}" data-active="${d.archive?'0':'1'}">${d.archive?'Désarchiver':'Archiver'}</button><button data-delete="${esc(d.id)}">Supprimer</button></details></div>`).join('')}</div>`;
+}
 function renderHome(){
- $('#main').innerHTML=`<div class="eyebrow">Votre espace de travail</div><h1>Mes évaluations</h1><p class="lede">Préparez la correction avec l’IA, vérifiez les résultats et retrouvez vos dossiers à tout moment.</p>
+ const active=homeData.dossiers.filter(d=>!d.archive),archived=homeData.dossiers.filter(d=>d.archive);
+ $('#main').innerHTML=`<div class="eyebrow">Votre espace de travail</div><h1>Mes évaluations</h1><button id="policies-menu">Consignes</button><p class="lede">Préparez la correction avec l’IA, vérifiez les résultats et retrouvez vos dossiers à tout moment.</p>
  <div class="hero-actions"><button class="action-card" id="add-class"><div><div class="icon">＋</div><strong>Ajouter une classe</strong><span>Importez votre liste d’élèves depuis un CSV nom / prénom.</span></div></button><button class="action-card featured" id="new-dossier"><div><div class="icon">↗</div><strong>Corriger un paquet de copies</strong><span>Un PDF entier, une grille discutée ensemble et des fiches prêtes à partager.</span></div></button></div>
- <div class="section-label"><h2>Dossiers de correction</h2><span class="count">${homeData.dossiers.length} dossier${homeData.dossiers.length!==1?'s':''}</span></div>
- ${homeData.dossiers.length?`<div class="dossier-list">${homeData.dossiers.map(d=>`<div class="dossier-row"><div class="grow"><strong>${esc(d.titre)}</strong><small>${esc(d.classe)} · Grille ${d.revision||'à préparer'}</small></div><span class="badge ${d.termine?'ok':''}">${d.termine?'Document final disponible':'En cours'}</span><button data-open="${esc(d.id)}">Reprendre →</button></div>`).join('')}</div>`:'<div class="empty">Votre premier dossier apparaîtra ici.<br>Commencez par ajouter une classe.</div>'}
+ <div class="section-label"><h2>Dossiers de correction</h2><span class="count">${active.length} dossier${active.length!==1?'s':''}</span></div>
+ ${active.length?dossierList(active):'<div class="empty">Aucune épreuve en cours.</div>'}
+ ${archived.length?`<details class="card"><summary>Archives (${archived.length})</summary>${dossierList(archived)}</details>`:''}
+
  <div class="section-label"><h2>Mes classes</h2></div><div>${homeData.classes.map(c=>`<span class="class-chip">${esc(c.classe)} <span class="tiny">${c.effectif} élèves</span></span>`).join('')||'<span class="help">Aucune classe importée pour le moment.</span>'}</div>
  ${homeData.latex?'':'<div class="notice warning">LaTeX n’est pas détecté. Vous pouvez préparer les corrections ; la génération PDF demandera une installation LaTeX.</div>'}`;
- $('#add-class').onclick=classModal;$('#new-dossier').onclick=newModal;
+ $('#policies-menu').onclick=()=>task(policiesModal);$('#add-class').onclick=classModal;$('#new-dossier').onclick=newModal;
+ document.querySelectorAll('[data-archive]').forEach(b=>b.onclick=()=>task(async()=>{const active=b.dataset.active==='1';await post({action:'archiver',dossier:b.dataset.archive,actif:active});await loadHome();toast(active?'Épreuve archivée.':'Épreuve remise dans les dossiers en cours.');}));
+ document.querySelectorAll('[data-delete]').forEach(b=>b.onclick=()=>deleteDossierModal(b.dataset.delete));
  document.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openDossier(b.dataset.open));
+}
+function deleteDossierModal(id){
+ const dossier=homeData.dossiers.find(d=>d.id===id);if(!dossier)return;
+ showModal(`<h2>Supprimer cette épreuve ?</h2><p><strong>${esc(dossier.titre)}</strong> — ${esc(dossier.classe)}</p><p>Le dossier, ses barèmes, corrections, documents importés et PDF générés seront supprimés définitivement. Les classes, élèves et consignes réutilisables sont conservés.</p><div class="actions"><button id="cancel-delete">Annuler</button><button id="confirm-delete">Supprimer définitivement</button></div>`);
+ $('#cancel-delete').onclick=()=>$('#modal').close();
+ $('#confirm-delete').onclick=()=>task(async()=>{
+  const result=await post({action:'supprimer',dossier:id,confirmer:true});
+  for(const key of drafts.keys())if(key.startsWith(id+':'))drafts.delete(key);
+  $('#modal').close();await loadHome();
+  toast(result.avertissements?.length?result.avertissements.join(' '):'Épreuve supprimée.',!!result.avertissements?.length);
+ });
 }
 let rosterPreview=null;
 function rosterChoices(){
@@ -56,7 +75,7 @@ function classModal(){rosterText='';rosterChecked=false;rosterPreview=null;showM
   catch(e){$('#roster-error').innerHTML='<div class="error">'+esc(e.message)+'</div>';throw e;}
  });
 }
-function newModal(){if(!homeData.classes.length){classModal();return;}showModal(`<div class="eyebrow">Nouveau dossier</div><h1>Corriger un paquet</h1><div class="field"><label for="new-class">Classe</label><select id="new-class">${homeData.classes.map(c=>`<option>${esc(c.classe)}</option>`).join('')}</select></div><div class="field"><label for="new-title">Nom de l’évaluation</label><input id="new-title" placeholder="Ex. Équations — savoir-faire 1"></div><button class="primary" id="create-dossier">Créer le dossier →</button>`);$('#create-dossier').onclick=()=>task(async()=>{const r=await post({action:'creer',classe:$('#new-class').value,titre:$('#new-title').value});$('#modal').close();await openDossier(r.id,0);});}
+function newModal(){if(!homeData.classes.length){classModal();return;}showModal(`<div class="eyebrow">Nouveau dossier</div><h1>Corriger un paquet</h1><div class="field"><label for="new-class">Classe</label><select id="new-class">${homeData.classes.map(c=>`<option>${esc(c.classe)}</option>`).join('')}</select></div><div class="field"><label for="new-title">Nom de l’évaluation</label><input id="new-title" placeholder="Ex. Équations — savoir-faire 1"></div>${typeInput("new-type")}<button class="primary" id="create-dossier">Créer le dossier →</button>`);$('#create-dossier').onclick=()=>task(async()=>{const r=await post({action:'creer',classe:$('#new-class').value,titre:$('#new-title').value,type_epreuve:$('#new-type').value});$('#modal').close();await openDossier(r.id,0);});}
 function resumeStep(){return state.dossier.termine?6:!state.dossier.revision?0:state.versions.some(v=>!v.corrige_latex)?2:!state.copies.length?3:state.dossier.echantillon_valide?5:4;}
 async function openDossier(id,step=null){state=await get('/api/dossier?id='+encodeURIComponent(id));current=step===null?resumeStep():step;referenceVersion=null;renderDossier();}
 function header(title,description){return `<div class="page-head"><div><div class="eyebrow">Étape ${current+1} sur ${stages.length} · ${esc(state.dossier.classe)}</div><h1>${title}</h1><p class="lede">${description}</p></div><span class="badge">${esc(state.dossier.titre)}</span></div>`;}
@@ -173,7 +192,31 @@ function renderFeedback(){
  exchangePanel('retour','Nouvelles consignes au format JSON','Deux textes complets : les consignes générales et les consignes de la classe.')+`<button id="view-policies">Consulter les consignes et leur historique</button>`;
  $('#view-policies').onclick=policiesModal;
 }
-async function policiesModal(){const history=await get('/api/history?classe='+encodeURIComponent(state.dossier.classe));showModal(`<h2>Consignes mémorisées</h2><p class="help">Les nouveaux dossiers reprennent les dernières consignes validées. Un dossier en cours conserve celles de son démarrage.</p><h3>Générales</h3><div class="policy">${esc(state.consignes.generales.texte||'Aucune consigne générale enregistrée.')}</div><h3>${esc(state.dossier.classe)}</h3><div class="policy">${esc(state.consignes.classe.texte||'Aucune consigne de classe enregistrée.')}</div><h3>Historique</h3>${history.map(r=>`<details><summary>${esc(r.portee)} · ${esc(r.cree_le)} · version ${r.id}</summary><div class="policy">${esc(r.texte)}</div></details>`).join('')||'<p class="help">Aucune version antérieure.</p>'}`,true);}
+function typeInput(id,value=''){return `<div class="field"><label for="${id}">Type d’épreuve</label><input id="${id}" list="${id}-options" value="${esc(value)}" placeholder="Interro, DST, DM…" maxlength="80"><datalist id="${id}-options"><option value="Interro"><option value="DST"><option value="DM"></datalist><small>Facultatif. Vous pouvez écrire un autre type.</small></div>`;}
+async function policiesModal(){
+ const home=await get('/api/home');
+ showModal(`<h2>Consignes</h2><p>Consignes pédagogiques réutilisées dans les prochains messages à l’IA. Le format JSON reste géré par l’application.</p><div class="field"><label for="policy-class">Classe</label><select id="policy-class">${home.classes.map(c=>`<option ${c.classe===state?.dossier.classe?'selected':''}>${esc(c.classe)}</option>`).join('')}</select></div>${typeInput('policy-type',state?.dossier.type_epreuve||'')}<div class="field"><label for="policy-scope">Consignes à modifier</label><select id="policy-scope"><option value="generales">Générales — toutes les classes</option><option value="classe">Cette classe — tous les types</option><option value="type">Cette classe et ce type d’épreuve</option></select></div><button id="load-policy">Afficher les consignes</button><div id="policy-editor"></div>`,true);
+ let generation=0;
+ const load=async()=>{
+  const request=++generation;
+  const classe=$('#policy-class').value||'',kind=$('#policy-type').value,scope=$('#policy-scope').value;
+  if(scope==='type'&&!kind.trim()){toast('Indiquez un type d’épreuve.',true);return;}
+  const data=await get('/api/consignes?classe='+encodeURIComponent(classe)+'&type='+encodeURIComponent(kind));
+  const history=scope==='type'?data.historique_type:(await get('/api/history?classe='+encodeURIComponent(classe))).filter(r=>r.portee===(scope==='generales'?'generale':'classe'));
+  if(request!==generation)return;
+  const policy=data[scope],label=scope==='generales'?'Toutes les classes':classe+(scope==='type'?' / '+kind:' — tous les types');
+  $('#policy-editor').innerHTML=`<h3>${esc(label)}</h3><details><summary>Consignes enregistrées</summary><div class="policy">${esc(policy.texte||'Aucune consigne.')}</div></details><h3>Consigne à copier dans l’IA</h3><p>Demandez une réécriture, puis collez le texte complet ci-dessous.</p><button id="copy-policy">Copier</button><label for="policy-text">Résultat de l’IA — modifiable</label><textarea id="policy-text">${esc(policy.texte)}</textarea><button class="primary" id="save-policy">Remplacer ces consignes</button><p class="help">Les anciennes versions restent consultables. Les notes et PDF existants sont conservés.</p><details><summary>Historique</summary>${history.map(r=>`<details><summary>${esc(r.cree_le)} · version ${r.id}</summary><div class="policy">${esc(r.texte)}</div></details>`).join('')}</details>`;
+  $('#copy-policy').onclick=()=>copyText('Réécris les consignes pédagogiques pour '+label+'. Simplifie, supprime les répétitions et signale les contradictions. Conserve les décisions pédagogiques validées ; ne généralise pas les exceptions propres à une évaluation. Aucun nom, numéro d’élève ni note individuelle. Discute les changements avec moi, puis fournis le texte COMPLET de remplacement, sans JSON ni texte autour. Ne réécris pas le contrat technique de l’application.\n\nConsignes actuelles :\n'+policy.texte);
+  $('#save-policy').onclick=()=>task(async()=>{
+   await post({action:'consigne',portee:scope,classe,type_epreuve:kind,base:policy.id,texte:$('#policy-text').value});
+   if(state){state=await get('/api/dossier?id='+state.dossier.id);renderDossier();}
+   toast('Consignes remplacées.');await load();
+  });
+ };
+ const reset=()=>{generation++;$('#policy-editor').innerHTML='<p>Afficher les consignes pour ce choix.</p>';};
+ $('#policy-class').onchange=reset;$('#policy-type').oninput=reset;$('#policy-scope').onchange=reset;
+ $('#load-policy').onclick=()=>task(load);await load();
+}
 function promptUrl(stage){let url='/api/prompt?id='+state.dossier.id+'&etape='+encodeURIComponent(stage.startsWith('corrige:')?'corrige':stage);if(stage.startsWith('corrige:'))url+='&version='+encodeURIComponent(stage.slice(8));if(stage==='correction')url+='&mode='+correctionMode;return url;}
 async function loadPrompt(stage,areaSelector='#prompt',buttonSelector='#copy-prompt'){
  const area=$(areaSelector),button=$(buttonSelector);
@@ -214,7 +257,7 @@ function renderPreview(stage,r,text){
  if(stage==='grille'){const data=JSON.parse(text);html+=table(['Version','Exercice','Question','Item','Critère','Points'],data.grilles.flatMap(g=>g.exercices.flatMap(e=>e.questions.flatMap(q=>q.items.map(i=>[g.version||'Commune',e.numero,q.numero,i.code,i.description,i.bareme_max])))));html+=`<p class="success">${r.grilles.map(g=>esc(g.nom||'Grille')+' : '+g.total_points+' points').join(' · ')}</p>`;if(r.copies_a_reprendre)html+=`<div class="notice warning">${r.copies_a_reprendre} corrections resteront archivées. Les copies devront être corrigées avec la nouvelle grille.</div>`;}
  else if(stage==='copies'){const data=JSON.parse(text);html+=`<p class="help">Vous pouvez rectifier les identités, les pages et les versions ci-dessous, puis cliquer à nouveau sur « Vérifier ».</p><div class="table-wrap"><table><thead><tr><th>Copie</th><th>Élève</th><th>Version</th><th>Pages</th></tr></thead><tbody>${data.copies.map((c,i)=>`<tr><td>${esc(c.reference)}</td><td><select data-edit-copy="${i}" data-field="numero"><option value="">Non identifié</option>${state.eleves.map(e=>`<option value="${e.numero}" ${c.numero===e.numero?'selected':''}>ID ${e.numero} — ${esc(e.prenom+' '+e.nom)}</option>`).join('')}</select></td><td><select data-edit-copy="${i}" data-field="version">${state.versions.map(v=>`<option ${c.version===v.version?'selected':''}>${esc(v.version)}</option>`).join('')}</select></td><td><input data-edit-copy="${i}" data-field="pages" aria-label="Pages ${esc(c.reference)}" value="${esc(c.pages.join(', '))}"></td></tr>`).join('')}</tbody></table></div><p class="help">Élèves sans copie repérée : ${esc(r.sans_copie_reperee.join(', ')||'aucun')}. Aucun n’est déclaré absent automatiquement.</p>`;}
  else if(stage==='correction'){html+=table(['Copie','Points','Action'],r.corrections.map(c=>[c.reference,c.note_brute+' / '+c.bareme,c.remplacement?'Remplacer la correction':'Enregistrer']));for(const c of r.a_revoir)html+=`<div class="notice warning">${esc(c.reference)} : ${esc(c.motif)}</div>`;html+=`<details><summary>Relire le détail par item et les conseils</summary><pre>${esc(text)}</pre></details>`;}
- else if(stage==='retour'){for(const key of ['generales','classe'])html+=`<h3>${key==='generales'?'Consignes générales':'Consignes de la classe'}</h3><div class="policy">${esc(r[key].apres||'(texte vide)')}</div><details open><summary>Modifications proposées</summary><pre>${esc(r[key].diff||'Aucune modification.')}</pre></details>`;}
+ else if(stage==='retour'){for(const key of ['generales','classe','type'].filter(k=>r[k]))html+=`<h3>${key==='generales'?'Consignes générales':key==='type'?'Consignes de la classe et du type':'Consignes de la classe'}</h3><div class="policy">${esc(r[key].apres||'(texte vide)')}</div><details open><summary>Modifications proposées</summary><pre>${esc(r[key].diff||'Aucune modification.')}</pre></details>`;}
  else html+=`<p class="success">Corrigé de la version ${esc(r.version)} prêt à enregistrer (${r.caracteres} caractères). La compilation sera vérifiée lors de la génération des fiches.</p><pre>${esc(text)}</pre>`;
  $('#preview').innerHTML=html+'</div>';
  document.querySelectorAll('[data-edit-copy]').forEach(input=>input.onchange=()=>{const data=JSON.parse(responseBody($('#response').value,'copies')),index=Number(input.dataset.editCopy),field=input.dataset.field;let value=input.value;if(field==='numero')value=value?Number(value):null;if(field==='pages')value=value.split(',').map(x=>Number(x.trim()));data.copies[index][field]=value;$('#response').value=JSON.stringify(data,null,2);$('#response').dispatchEvent(new Event('input'));});

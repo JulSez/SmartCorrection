@@ -115,7 +115,7 @@ def _dummy_student(version, corrige_latex, items=None):
     return {
         'grille_vierge': True,
         'numero': None,
-        'label': '........................................................',
+        'label': 'Élève : ....................',
         'version': version or 'Commune',
         'statut': 'present',
         'note_individuelle': _BLANK,

@@ -60,3 +60,18 @@ CREATE TABLE IF NOT EXISTS ui_rendu (
  final INTEGER NOT NULL, chemin TEXT NOT NULL, valide INTEGER NOT NULL DEFAULT 1,
  cree_le TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS ui_archive (
+ dossier_id TEXT PRIMARY KEY REFERENCES ui_dossier(id) ON DELETE CASCADE,
+ archive_le TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ui_type_epreuve (
+ dossier_id TEXT PRIMARY KEY REFERENCES ui_dossier(id) ON DELETE CASCADE,
+ type_epreuve TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS consigne_type_revision (
+ id INTEGER PRIMARY KEY, classe TEXT NOT NULL, type_epreuve TEXT NOT NULL,
+ texte TEXT NOT NULL, source_dossier TEXT, cree_le TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS consigne_type_lookup ON consigne_type_revision(classe,type_epreuve,id);

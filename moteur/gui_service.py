@@ -17,6 +17,7 @@ from .import_evaluation import import_evaluation
 from .import_correction import import_correction, compatible_grid
 from .calcul import calculate_selection
 from .correction_contract import check_fields, normalize_corrections
+from .instructions import type_name, type_policy, put_type
 from .gui_groups import group_state, save_groups, copy_groups
 from .render import export_results
 from .validation import array, integer, number, object_fields, parse_json, string
@@ -76,7 +77,7 @@ class Application:
                 conn.execute("INSERT INTO ui_meta VALUES('consignes_md_importees','1')")
 
     def _dossier(self, conn, ident):
-        row = conn.execute('SELECT * FROM ui_dossier WHERE id=?', (ident,)).fetchone()
+        row = conn.execute("SELECT d.*,COALESCE(t.type_epreuve,'') type_epreuve FROM ui_dossier d LEFT JOIN ui_type_epreuve t ON t.dossier_id=d.id WHERE d.id=?", (ident,)).fetchone()
         if not row:
             raise ValueError('Dossier introuvable')
         return row
@@ -112,7 +113,7 @@ class Application:
     def home(self):
         with database(self.db_path) as conn:
             return {'classes': [dict(r) for r in conn.execute('SELECT classe,COUNT(*) effectif FROM eleve_classe GROUP BY classe ORDER BY classe')],
-                    'dossiers': [dict(r) for r in conn.execute('SELECT * FROM ui_dossier ORDER BY cree_le DESC,id')],
+                    'dossiers': [dict(r) for r in conn.execute('SELECT d.*,a.archive_le,a.dossier_id IS NOT NULL archive FROM ui_dossier d LEFT JOIN ui_archive a ON a.dossier_id=d.id ORDER BY d.cree_le DESC,d.id')],
                     'latex': bool(shutil.which('pdflatex'))}
 
     def state(self, ident):
@@ -145,7 +146,7 @@ class Application:
                     'rendus': [dict(id=r['id'], revision=r['revision'], final=r['final'], valide=r['valide'],
                                    cree_le=r['cree_le'], intercale=(Path(r['chemin'])/'copies-et-corrections.pdf').is_file(), pdf=(Path(r['chemin'])/'corrections.pdf').is_file())
                                for r in conn.execute('SELECT * FROM ui_rendu WHERE dossier_id=? ORDER BY cree_le DESC,id DESC', (ident,))],
-                    'consignes': {'generales': _policy(conn,'generale'), 'classe': _policy(conn,'classe',dossier['classe'])}}
+                    'consignes': {'generales': _policy(conn,'generale'), 'classe': _policy(conn,'classe',dossier['classe']), 'type': type_policy(conn,dossier['classe'],dossier['type_epreuve'])}}
 
     def roster(self, classe, text, commit=False, choices=None, fingerprint=None):
         string(classe, 'classe')
@@ -162,14 +163,31 @@ class Application:
         finally:
             path.unlink(missing_ok=True)
 
-    def create(self, classe, title):
+    def archive(self, ident, active):
+        if type(active) is not bool:
+            raise ValueError('Archivage : booléen attendu')
+        with database(self.db_path) as conn:
+            self._dossier(conn, ident)
+            if active:
+                conn.execute('INSERT OR IGNORE INTO ui_archive(dossier_id) VALUES(?)', (ident,))
+            else:
+                conn.execute('DELETE FROM ui_archive WHERE dossier_id=?', (ident,))
+        return {'archive': active}
+
+    def delete(self, ident, confirmed=False):
+        from .dossier_lifecycle import delete_dossier
+        return delete_dossier(self, ident, confirmed)
+
+    def create(self, classe, title, kind=""):
         string(classe); string(title)
+        kind = type_name(kind)
         with database(self.db_path) as conn:
             if not conn.execute('SELECT 1 FROM eleve_classe WHERE classe=?', (classe,)).fetchone():
                 raise ValueError('Importer cette classe avant de créer le dossier')
             ident = uuid.uuid4().hex
             conn.execute('INSERT INTO ui_dossier(id,classe,titre,generale_id,classe_id) VALUES(?,?,?,?,?)',
                          (ident, classe, title, _policy(conn,'generale')['id'], _policy(conn,'classe',classe)['id']))
+            conn.execute('INSERT INTO ui_type_epreuve VALUES(?,?)', (ident,kind))
         return {'id': ident}
 
     def upload(self, ident, role, name, encoded):
@@ -553,7 +571,9 @@ class Application:
         return {'id':rid,'pdf':pdf,'fichiers':sorted(p.name for p in folder.iterdir())}
 
     def _feedback(self, conn, dossier, data):
-        self._envelope(data,dossier,{'base_generale','base_classe','generales','classe'}, {'base_generale','base_classe','generales','classe'})
+        self._envelope(data,dossier,{'base_generale','base_classe','generales','classe','base_type','type','type_epreuve'}, {'base_generale','base_classe','generales','classe'})
+        if ('base_type' in data) != ('type' in data):
+            raise ValueError('Fournir type et base_type ensemble')
         if not dossier['termine']:
             raise ValueError('Produire le document final avant le retour d’expérience')
         result={}
@@ -569,6 +589,21 @@ class Application:
             diff='\n'.join(difflib.unified_diff(current['texte'].splitlines(),text.splitlines(),fromfile='Consignes actuelles',tofile='Proposition',lineterm=''))
             rid=_put_instructions(conn,scope,classe,text,dossier['id'])
             result[key]={'avant':current['texte'],'apres':text,'diff':diff,'revision':rid}
+        if 'type' in data:
+            if data.get('type_epreuve') != dossier['type_epreuve']:
+                raise ValueError('Le type d’épreuve a changé. Recopier la consigne actuelle.')
+            kind = dossier['type_epreuve']
+            if not kind:
+                raise ValueError('Ce dossier n’a pas de type d’épreuve')
+            current = type_policy(conn,dossier['classe'],kind)
+            if (data['base_type'] is not None and type(data['base_type']) is not int) or data['base_type'] != current['id']:
+                raise ValueError('Les consignes du type ont changé. Recopier la consigne actuelle.')
+            text = data['type']
+            if not isinstance(text,str):
+                raise ValueError('type doit être un texte complet')
+            rid = put_type(conn,dossier['classe'],kind,text,dossier['id'])
+            result['type'] = {'avant':current['texte'],'apres':text,'revision':rid,
+                'diff':'\n'.join(difflib.unified_diff(current['texte'].splitlines(),text.splitlines(),lineterm=''))}
         return result
 
     def instruction_history(self, classe):

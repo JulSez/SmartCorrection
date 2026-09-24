@@ -108,12 +108,21 @@ def _save_corriges(conn, dossier, entries):
 
 def _calibration(self, conn, dossier, data):
     allowed = {"dossier", "revision", "pretraitement", "corriges", "corrections", "a_revoir", "moyenne_estimee"}
-    self._envelope(data, dossier, allowed, {"corrections", "moyenne_estimee"})
+    self._envelope(data, dossier, allowed, {"corrections"})
 
-    had_copies = bool(conn.execute("SELECT 1 FROM ui_copie WHERE dossier_id=? LIMIT 1", (dossier["id"],)).fetchone())
     prep = pr20._read_preprocessing(conn, dossier["id"])
     if prep and 'pretraitement' in data:
-        raise ValueError('Inventaire déjà enregistré : retirer pretraitement de ce lot ; modifier les affectations localement')
+        raw = data['pretraitement']
+        if not isinstance(raw, dict):
+            raise ValueError('Prétraitement : objet attendu')
+        supplied = pr25._validate_preprocessing(dict(raw, dossier=dossier['id'], revision=dossier['revision']), dossier, pr20._anonymity(conn,dossier['id']))
+        def inventory(value):
+            fields = ('reference','version','pages','identite_lue','nom','prenom')
+            return (sorted([{k:c.get(k) for k in fields} for c in value['copies']], key=lambda c:c['reference']),
+                    sorted(value['pages_ignorees'],key=lambda p:p['page']))
+        if inventory(supplied) != inventory(prep):
+            raise ValueError('Inventaire différent : modifier les affectations séparément de la correction')
+
     if not prep:
         raw = data.get("pretraitement")
         if not isinstance(raw, dict):
@@ -150,11 +159,6 @@ def _calibration(self, conn, dossier, data):
     if not 1 <= len(refs) <= 5 or len(set(refs)) != len(refs):
         raise ValueError("Le lot de calibrage doit contenir entre 1 et 5 copies distinctes.")
 
-    current = {r["reference"] for r in conn.execute(
-        "SELECT reference FROM ui_copie WHERE dossier_id=? AND echantillon=1", (dossier["id"],))}
-    if had_copies and current and set(refs) != current:
-        raise ValueError("Le JSON doit corriger exactement le lot affiché dans SmartCorrection.")
-
     conn.execute("UPDATE ui_copie SET echantillon=0 WHERE dossier_id=?", (dossier["id"],))
     for ref in refs:
         row = conn.execute("SELECT 1 FROM ui_copie WHERE dossier_id=? AND reference=?", (dossier["id"], ref)).fetchone()
@@ -167,10 +171,12 @@ def _calibration(self, conn, dossier, data):
         "corrections": corrections, "a_revoir": data.get("a_revoir", []),
     }
     summary = BaseApplication._corrections(self, conn, dossier, payload)
-    mean = number(data["moyenne_estimee"], "moyenne estimée")
-    if not 0 <= mean <= 20:
-        raise ValueError("La moyenne estimée doit être comprise entre 0 et 20.")
-    _set_meta(conn, _MEAN_KEY.format(dossier["id"]), str(mean))
+    mean = _meta(conn, _MEAN_KEY.format(dossier['id'])) or None
+    if 'moyenne_estimee' in data:
+        mean = number(data['moyenne_estimee'], 'moyenne estimée')
+        if not 0 <= mean <= 20:
+            raise ValueError('La moyenne estimée doit être comprise entre 0 et 20.')
+        _set_meta(conn, _MEAN_KEY.format(dossier['id']), str(mean))
     return {"lot": refs, "moyenne_estimee": mean, "corrections": summary}
 
 

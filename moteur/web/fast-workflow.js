@@ -71,6 +71,17 @@ function packetPanel(){
  return packet?`<div class="card"><h2>PDF des copies</h2><p>${esc(packet.nom)} · ${packet.pages} pages</p><a target="_blank" rel="noopener" href="/file?kind=source&id=${packet.id}">Ouvrir le paquet ↗</a></div>`:
  `<div class="card"><h2>PDF des copies</h2><p class="help">Importez le paquet pour afficher les pages des élèves avec leurs fiches. Joignez-le aussi séparément dans l’IA.</p><input type="file" id="packet-file" accept="application/pdf,.pdf"><button id="upload-packet">Importer le PDF des copies</button></div>`;
 }
+function referenceDocumentPanel(){
+ const documents=(state.fichiers||[]).filter(f=>f.role==='corrige');
+ return `<details class="card"><summary>Corrigé de référence (facultatif)</summary><p class="help">Ajoutez le PDF du corrigé et joignez-le aussi dans l’IA. Le corrigé LaTeX pourra être ajusté pendant le calibrage.</p>${documents.map(f=>`<p><a target="_blank" rel="noopener" href="/file?kind=source&id=${f.id}">${esc(f.nom)}</a></p>`).join('')}<input type="file" id="reference-file" accept="application/pdf,.pdf"><button id="upload-reference">Importer le corrigé PDF</button></details>`;
+}
+function bindReferenceDocument(){
+ $('#upload-reference').onclick=()=>task(async()=>{
+  const file=$('#reference-file').files[0];if(!file)throw Error('Choisir le PDF du corrigé.');
+  await post({action:'upload',dossier:state.dossier.id,role:'corrige',nom:file.name,contenu:await fileBase64(file)});
+  state=await get('/api/dossier?id='+state.dossier.id);renderDossier();toast('Corrigé PDF importé.');
+ });
+}
 function bindPacket(){
  const button=$('#upload-packet');if(!button)return;
  button.onclick=()=>task(async()=>{
@@ -81,11 +92,11 @@ function bindPacket(){
 }
 function renderBaremeFast(){
  $('#main').innerHTML=fastHeader('1. Barème','Discutez du barème avec l’IA. Quand il vous convient, l’IA fournit le JSON final à coller ici.')+
- layoutCard('setup')+packetPanel()+
+ `<details class="card"><summary>Type d’épreuve : ${esc(state.dossier.type_epreuve||'non précisé')}</summary>${typeInput('dossier-type',state.dossier.type_epreuve||'')}<button id="save-type">Enregistrer le type</button></details>`+layoutCard('setup')+packetPanel()+referenceDocumentPanel()+
  `<div class="card"><h2>Documents côté IA</h2><p>Joignez directement dans la conversation IA : copies, sujet, corrigé éventuel et documents de cours. SmartCorrection ne les renvoie pas à l’IA.</p>${anonymityControl()}</div>`+
  fastExchange('bareme','Valider et voir le barème')+
  (state.grille.length?`<div class="notice success">Barème validé — révision ${state.dossier.revision}.</div>`:'');
- bindLayout('setup');bindPacket();bindAnonymity();bindFastPrompt('bareme');
+ $('#save-type').onclick=()=>task(async()=>{await post({action:'type_epreuve',dossier:state.dossier.id,type_epreuve:$('#dossier-type').value});state=await get('/api/dossier?id='+state.dossier.id);renderDossier();toast('Type enregistré. La consigne est à jour.');});bindLayout('setup');bindPacket();bindReferenceDocument();bindAnonymity();bindFastPrompt('bareme');
  $('#fast-submit').onclick=()=>task(async()=>{try{
    await fastExchangeCommit('bareme');state=await get('/api/dossier?id='+state.dossier.id);renderDossier();showGridPreviewV2();toast('Barème validé. Vérifiez le PDF, puis passez au calibrage.');
  }catch(e){$('#fast-error').innerHTML=`<div class="error">${esc(e.message)}</div>`;throw e;}});

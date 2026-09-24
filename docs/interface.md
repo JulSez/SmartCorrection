@@ -387,3 +387,61 @@ chaque copie avec sa fiche de correction. Sans PDF importé, seules les fiches s
 et « Copies et corrections intercalées ». Les pages conservent leur taille d’origine ; une fiche
 A5 et une copie A4 peuvent donc coexister. Seules les copies sélectionnées sont intercalées,
 sans pages ignorées ; les absences ont une fiche sans pages de copie.
+
+### Supprimer ou archiver une épreuve
+
+Sur l’accueil, le menu « Actions » d’une épreuve propose « Archiver » et « Supprimer ».
+L’archivage déplace simplement l’épreuve dans la section « Archives » : ses données et fichiers
+restent accessibles. « Désarchiver » la remet dans la liste des épreuves en cours.
+
+La suppression demande une confirmation et retire les révisions du barème, corrections,
+échanges et fichiers propres à cette épreuve. Les élèves, classes et consignes réutilisables
+sont conservés. Un verrouillage empêchant le déplacement des fichiers annule la suppression.
+Si le nettoyage final échoue après suppression, un message indique le dossier restant à nettoyer.
+
+### Corrigé importé et aperçu du barème
+
+Un corrigé PDF facultatif peut être importé sur le premier écran, en plus du paquet de copies.
+Il faut aussi le joindre à l’IA. Pendant le calibrage, omettre `corriges` conserve les références
+déjà enregistrées ; le fournir permet de remplacer le LaTeX, en reprenant toutes les versions.
+Le premier lot doit toujours fournir les références si elles ne sont pas encore enregistrées.
+
+« Valider et voir le barème » affiche toujours les exercices, questions, critères et points,
+même si les fiches élèves sont configurées en mode par question. Ce choix d’aperçu ne modifie
+pas leur réglage. L’intercalage produit également des fichiers `original_eleve_…pdf` ou
+`original_copie_…pdf`, contenant uniquement les pages de chaque copie. Les deux téléchargements
+finaux (corrections seules ou intercalées) restent disponibles.
+
+### Mettre à jour une copie déjà corrigée
+
+Dans le calibrage, coller un JSON contenant uniquement la correction complète de la copie à
+modifier, même si elle appartenait à un autre lot. Les corrections non fournies sont conservées.
+Les références reçues deviennent le lot affiché. La moyenne estimée est facultative lors de
+l’import ; l’ancienne valeur est conservée si elle est omise. Un inventaire répété à l’identique
+est accepté sans modifier les affectations locales. Une révision périmée, un inventaire divergent
+ou des points invalides restent rejetés, sans effacer la correction précédente.
+
+
+### Menu Consignes et types d’épreuve
+
+Depuis l’accueil, **Consignes** permet de consulter ou remplacer les textes pédagogiques.
+Choisissez la portée : toutes les classes, une classe, ou un couple classe/type (par exemple
+TMEX / DST). Le bouton **Copier** prépare une demande de simplification à envoyer à l’IA.
+Relisez son texte complet dans l’éditeur, puis cliquez **Remplacer ces consignes**.
+Les anciennes versions restent dans l’historique. Une proposition fondée sur une version
+obsolète est refusée pour éviter d’écraser une modification récente.
+
+À la création du dossier, le type est facultatif : Interro, DST, DM ou un autre libellé.
+Il reste modifiable dans l’écran Barème. La casse et les espaces superflus sont normalisés.
+Les dossiers existants restent sans type tant que l’enseignant n’en choisit pas un.
+Les consignes générales, celles de la classe et celles du couple classe/type sont ajoutées
+aux prochains messages à l’IA. Les corrections déjà enregistrées ne sont pas recalculées
+par un changement de consigne ; pour les réviser, importez une nouvelle correction.
+
+Après le document final, le **retour d’expérience** propose de raccourcir et restructurer
+ces textes à partir des décisions validées avec l’enseignant. L’aperçu montre les changements
+avant remplacement. Pour un dossier typé, le JSON ajoute `type_epreuve`, `base_type` et `type` aux champs
+`base_generale`, `base_classe`, `generales`, `classe`. `type` contient le texte complet propre
+au couple classe/type ; `base_type` est la version donnée par la consigne. Les champs `base_type` et `type`
+sont facultatifs mais doivent être fournis ensemble, avec le `type_epreuve` donné par la consigne. Tous les remplacements d’un retour
+sont transactionnels. Le contrat technique JSON reste fixe et séparé de cette mémoire.
