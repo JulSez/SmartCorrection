@@ -56,3 +56,18 @@ class GridPreviewPdfTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+@unittest.skipUnless(os.environ.get('SMARTCORRECTION_TEST_PDF') == '1', 'real PDF integration')
+class ActiveRubricPreviewTests(unittest.TestCase):
+    def test_active_preview_shows_criteria_even_in_question_mode(self):
+        from moteur.workflow_v2 import WorkflowApplication
+        case=test_gui.GuiWorkflowTests(); case.setUp(); self.addCleanup(case.doCleanups)
+        app=WorkflowApplication(case.root/'db.sqlite',case.root/'data',case.root/'legacy')
+        self.assertEqual(app.state(case.ident)['layout']['correction']['grid_mode'],'questions')
+        pdf=PdfReader(io.BytesIO(app.grid_preview(case.ident)))
+        text='\n'.join(p.extract_text() for p in pdf.pages)
+        self.assertIn('Résoudre',text)
+        self.assertIn('Conclure',text)
+        self.assertIn('/2',text)
+        self.assertEqual(app.state(case.ident)['layout']['correction']['grid_mode'],'questions')

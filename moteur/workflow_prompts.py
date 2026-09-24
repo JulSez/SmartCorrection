@@ -18,8 +18,10 @@ def _context(state):
         lines.append('Anonymat actif : utilise C001, C002… ; aucun nom/prénom ni numéro d’élève dans la réponse. identite_lue et numero restent null.')
     else:
         lines.append('Anonymat désactivé : identite_lue peut reprendre le numéro écrit ou le nom/prénom lisible sur la copie. Ne devine rien. numero reste null ; l’affectation est locale.')
-    for key in ('generales', 'classe'):
-        text = state['consignes'][key].get('texte', '').strip()
+    if d.get('type_epreuve'):
+        lines.append('Type d’épreuve : '+d['type_epreuve'])
+    for key in ('generales', 'classe', 'type'):
+        text = state['consignes'].get(key, {}).get('texte', '').strip()
         if text:
             lines.append(f'Consignes {key} :\n{text}')
     returns = (state.get('calibrage') or {}).get('retours', '').strip()
@@ -93,8 +95,8 @@ def make_prompt(app, ident, stage, version=None, mode='echantillon'):
         action = '\n\nACTION : '+('calibrer la correction' if calibration else 'corriger les copies restantes')+'.\nCopies à traiter : '+target+'.\n'
         example = dict(envelope, corrections=[_sample(state, selected)], a_revoir=[])
         if calibration:
-            action += 'Traite exactement le lot : 1 à 5 références au total dans corrections et a_revoir. '
-            action += 'moyenne_estimee est une estimation sur 20, jamais une cible de notation ni une raison de durcir le barème.\n'
+            action += 'Traite le lot demandé : 1 à 5 références au total dans corrections et a_revoir. Pour mettre à jour une copie, renvoie seulement sa correction complète ; les autres corrections restent conservées. '
+            action += 'moyenne_estimee est facultative ; c’est une estimation sur 20, jamais une cible de notation ni une raison de durcir le barème.\n'
             example['moyenne_estimee'] = 12.5
             if needs_inventory:
                 action += ('Dans CE JSON, pretraitement recense TOUT le paquet : copies avec reference C001…, numero:null, '
@@ -124,11 +126,16 @@ def make_prompt(app, ident, stage, version=None, mode='echantillon'):
         policies = state['consignes']
         example = dict(envelope, base_generale=policies['generales']['id'], base_classe=policies['classe']['id'],
                        generales=policies['generales']['texte'], classe=policies['classe']['texte'])
+        if d.get('type_epreuve'):
+            example.update(type_epreuve=d['type_epreuve'],base_type=policies['type']['id'],type=policies['type']['texte'])
         # Policies occur only in the example below, rather than twice in this prompt.
-        return ('ACTION : préparer les consignes pour la prochaine évaluation. À partir des décisions validées de cette conversation, '
-                'réécris deux textes COMPLETS : generales pour toutes les classes, classe pour cette classe. '
+        return (f"Classe : {d['classe']} ; type : {d.get('type_epreuve') or 'non précisé'}.\n"
+                'ACTION : préparer les consignes pour la prochaine évaluation. À partir des décisions validées de cette conversation, '
+                'réécris les textes COMPLETS : generales pour toutes les classes, classe pour cette classe. '
+                'Si le champ type est présent, réserve-lui les règles du couple classe/type de cette épreuve. '
+                'Simplifie et restructure les consignes : supprime les répétitions, signale les contradictions et conserve les décisions pédagogiques validées. '
                 'Conserve les règles encore valables ; ne généralise pas une exception propre à ce sujet. '
                 'Aucun nom, numéro d’élève, note individuelle ni code d’item. Présente les changements et attends l’accord de l’enseignant '
-                'avant le JSON de remplacement. Recopie les identifiants base_generale/base_classe sans les modifier. '
+                'avant le JSON de remplacement. Recopie les identifiants base_generale/base_classe/base_type et type_epreuve présents sans les modifier. '
                 'Les textes actuels sont dans l’exemple ; conserve-les s’il n’y a rien à changer.') + _response(example)
     raise ValueError('Étape inconnue')

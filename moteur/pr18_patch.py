@@ -231,6 +231,8 @@ def _progressive_preview(self, ident, stage):
                     FROM item i JOIN question q ON q.id=i.question_id JOIN exercice e ON e.id=q.exercice_id
                     WHERE i.grille_id=? ORDER BY e.ordre,q.ordre,i.ordre,i.id''', (grid['id'],))]
                 entries.append((grid['version'] or 'Commune', grid['str_latex'] or LOREM, items))
+    if stage == 'grid':
+        layout['correction']['grid_mode'] = 'detaillee'
     with _layout_renderer(layout):
         return workflow._compile_preview(subject, cfg, entries,
             {'correction': layout['correction']['size'], 'corrige': layout['corrige']['size']},

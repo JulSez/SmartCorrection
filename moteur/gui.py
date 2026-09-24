@@ -65,6 +65,9 @@ def make_server(app, port=0):
                     with app.lock:
                         text=make_prompt(app,query.get('id',[''])[0],query.get('etape',[''])[0],query.get('version',[None])[0],query.get('mode',['echantillon'])[0])
                     self._send(200,{'texte':text})
+                elif path=='/api/consignes':
+                    from .instructions import policies
+                    self._send(200,policies(app,query.get('classe',[''])[0],query.get('type',[''])[0]))
                 elif path=='/api/history':
                     self._send(200,app.instruction_history(query.get('classe',[''])[0]))
                 elif path=='/api/layout-preview':
@@ -120,7 +123,15 @@ def dispatch(app,data):
     if type(commit) is not bool:
         raise ValueError('Validation invalide')
     if action=='classe': return app.roster(data['classe'],data['texte'],commit,data.get('rapprochements'),data.get('empreinte'))
-    if action=='creer': return app.create(data['classe'],data['titre'])
+    if action=='archiver': return app.archive(ident,data.get('actif'))
+    if action=='supprimer': return app.delete(ident,data.get('confirmer',False))
+    if action=='creer': return app.create(data['classe'],data['titre'],data.get('type_epreuve',''))
+    if action=='consigne':
+        from .instructions import replace_policy
+        return replace_policy(app,data['portee'],data.get('classe',''),data.get('type_epreuve',''),data['texte'],data['base'])
+    if action=='type_epreuve':
+        from .instructions import set_type
+        return set_type(app,ident,data['type_epreuve'])
     if action=='upload': return app.upload(ident,data['role'],data['nom'],data['contenu'])
     if action=='anonymat': return app.save_anonymity(ident,data.get('actif',True))
     if action=='formats':

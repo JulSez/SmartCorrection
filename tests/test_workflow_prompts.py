@@ -128,6 +128,35 @@ class PromptWorkflowTests(unittest.TestCase):
         self.submit('correction', remaining)
         self.app.generate(self.ident, final=True, pdf=False)
 
+    def test_calibration_reference_is_optional_and_can_be_replaced(self):
+        self.start()
+        original = self.app.state(self.ident)['versions'][0]['corrige_latex']
+        value = self.example('calibrage')
+        self.assertNotIn('corriges', value)
+        self.submit('calibrage', value)
+        self.assertEqual(self.app.state(self.ident)['versions'][0]['corrige_latex'], original)
+        value['corriges'] = [{'version':'A','corrige_latex':r'Corrigé ajusté : $x=2$.'}]
+        self.submit('calibrage', value)
+        self.assertEqual(self.app.state(self.ident)['versions'][0]['corrige_latex'], value['corriges'][0]['corrige_latex'])
+
+    def test_update_one_copy_from_previous_batch_without_mean(self):
+        original = self.start(two=True)
+        self.app.sample(self.ident, ['C002'], False)
+        self.submit('calibrage', self.example('calibrage'))
+        other = self.app.state(self.ident)['copies'][1]['correction_id']
+        # Reuse a first-batch response, including its unchanged inventory and reference.
+        original.pop('moyenne_estimee')
+        original['corrections'][0]['items'][0]['points_obtenus'] = 1
+        self.submit('calibrage', original)
+        state = self.app.state(self.ident)
+        self.assertEqual(state['copies'][1]['correction_id'], other)
+        self.assertEqual(state['copies'][0]['note_finale'],10)
+        self.assertEqual([c['reference'] for c in state['copies'] if c['echantillon']],['C001'])
+        invalid = copy.deepcopy(original)
+        invalid['corrections'][0]['items'][0]['points_obtenus'] = 999
+        with self.assertRaises(ValueError): self.submit('calibrage', invalid)
+        self.assertEqual(self.app.state(self.ident)['copies'][0]['note_finale'],10)
+
     @unittest.skipUnless(os.environ.get('SMARTCORRECTION_TEST_PDF')=='1', 'real PDF integration')
     def test_first_prompt_example_compiles_real_pdf(self):
         from pypdf import PdfReader

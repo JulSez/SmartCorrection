@@ -17,6 +17,8 @@ class InterleaveTests(unittest.TestCase):
             first=pdf('first.pdf',[201,202]); second=pdf('second.pdf',[203])
             output=interleave_packet(packet,[(first,[3,1]),(second,[4])],root/'mixed.pdf')
             self.assertEqual([int(p.mediabox.width) for p in PdfReader(output).pages],[103,101,201,202,104,203])
+            self.assertEqual([int(p.mediabox.width) for p in PdfReader(root/'original_first.pdf').pages],[103,101])
+            self.assertEqual([int(p.mediabox.width) for p in PdfReader(root/'original_second.pdf').pages],[104])
             with self.assertRaisesRegex(ValueError,'Page de copie'):
                 interleave_packet(packet,[(first,[5])],root/'invalid.pdf')
 
