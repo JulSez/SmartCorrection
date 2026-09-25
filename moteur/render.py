@@ -235,6 +235,13 @@ def render_student(student, subject, cfg):
         lines += [r'{\scriptsize Individuelle /' + fmt(cfg.note_individuelle_max) + ' : ' + score(student.get('note_individuelle'))
                   + r' \textbullet{} Groupe /' + fmt(cfg.note_groupe_max) + ' : ' + esc(group_value)
                   + r' \textbullet{} Finale /' + fmt(cfg.note_finale_max) + ' : ' + final_value + r'}\par']
+    if student.get('statut') != 'absent':
+        advice = [esc(a['texte']) for a in student.get('conseils', []) if a.get('texte', '').strip()]
+        if advice:
+            lines += [r'\section*{Conseils}', r'{\fontsize{9.5}{11.5}\selectfont',
+                      r'\begin{list}{\textcolor{SCblue}{\textbullet}}{\setlength{\leftmargin}{3mm}\setlength{\labelsep}{1mm}\setlength{\itemsep}{2pt}\setlength{\parsep}{0pt}\setlength{\topsep}{1pt}}']
+            lines += [r'\item '+text for text in advice]
+            lines += [r'\end{list}}']
     lines += [r'{\color{SCblue}\hrule height .7pt}\vspace{1mm}']
 
     if student.get('statut') == 'absent':
@@ -266,11 +273,6 @@ def render_student(student, subject, cfg):
 
         if student.get('commentaire_global'):
             lines += [r'{\scriptsize ' + esc(student['commentaire_global']) + r'}\par']
-        if student.get('conseils'):
-            advice = [esc(a['texte']) for a in student['conseils'] if a.get('texte')]
-            if advice:
-                lines += [r'\section*{Conseil}', r'{\scriptsize ' + r' \textbullet{} '.join(advice) + r'}\par']
-
         checks = [str(x).strip() for x in student.get('a_verifier', []) if str(x).strip()]
         if checks:
             lines += [r'\section*{À vérifier par le prof}',

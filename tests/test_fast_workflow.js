@@ -164,3 +164,16 @@ test('instruction editor sends the loaded revision and selected class/type on re
  h.node('#policy-type').value='DM';h.node('#policy-type').oninput();
  assert.doesNotMatch(h.node('#policy-editor').innerHTML,/save-policy/);
 });
+
+
+test('finished assessments keep a targeted correction editor accessible',()=>{
+ const h=harness();
+ h.run(`state.copies=[{reference:'C001',statut:'present',correction_id:1,exclue_final:false}];state.dossier.termine=true;bindFastPrompt=(stage,mode)=>{window.requestedMode=mode;};bindCopyControls=()=>{};copyControls=()=>'';renderFullCorrectionFast();`);
+ assert.match(h.node('#main').innerHTML,/correction-target/);
+ assert.match(h.node('#main').innerHTML,/fast-response/);
+ assert.equal(h.context.window.requestedMode,'copie:C001');
+ h.node('#correction-target').value='copie:C002';h.node('#correction-target').onchange();
+ assert.equal(h.context.window.requestedMode,'copie:C002');
+ h.run(`current=3;renderFinalV2=()=>{};bindCommon=()=>{};renderDossier();`);
+ assert.match(h.node('#main').innerHTML,/Modifier une correction/);
+});

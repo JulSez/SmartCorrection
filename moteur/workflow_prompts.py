@@ -81,19 +81,22 @@ def make_prompt(app, ident, stage, version=None, mode='echantillon'):
         if not state['grille'] or not state['versions']:
             raise ValueError('Valider le barème avant de demander une correction')
         calibration = stage == 'calibrage'
-        if mode not in {'echantillon', 'reste'}:
+        revising = not calibration and mode.startswith('copie:')
+        if mode not in {'echantillon', 'reste'} and not revising:
             raise ValueError('Mode de correction inconnu')
         if not calibration and mode == 'reste' and not d['echantillon_valide']:
             raise ValueError('Valider le calibrage avant la correction complète')
         selected = [c for c in state['copies'] if c['statut']=='present' and
                     (c['echantillon'] if calibration or mode=='echantillon' else
                      not c['exclue_final'] and (not c['correction_id'] or c['a_revoir']))]
+        if revising:
+            selected = [c for c in state['copies'] if c['reference']==mode[6:] and c['statut']=='present']
         needs_inventory = not state.get('pretraitement')
         needs_references = any(not v.get('corrige_latex') for v in state['versions'])
         if not selected and (not calibration or not needs_inventory):
             raise ValueError('Aucune copie à corriger dans cette sélection')
         target = compact([{k:c[k] for k in ('reference','version','pages')} for c in selected]) if selected else 'les cinq premières copies du paquet, ou toutes s’il y en a moins'
-        action = '\n\nACTION : '+('calibrer la correction' if calibration else 'corriger les copies restantes')+'.\nCopies à traiter : '+target+'.\n'
+        action = '\n\nACTION : '+('calibrer la correction' if calibration else 'modifier uniquement la copie sélectionnée' if revising else 'corriger les copies restantes')+'.\nCopies à traiter : '+target+'.\n'
         example = dict(envelope, corrections=[_sample(state, selected)], a_revoir=[])
         if calibration:
             action += 'Traite le lot demandé : 1 à 5 références au total dans corrections et a_revoir. Pour mettre à jour une copie, renvoie seulement sa correction complète ; les autres corrections restent conservées. '
@@ -117,6 +120,7 @@ def make_prompt(app, ident, stage, version=None, mode='echantillon'):
             else:
                 action += 'Réutilise les corrigés déjà validés dans cette conversation. Ne renvoie corriges que pour une modification explicitement demandée, avec toutes les versions.\n'
         else:
+            action += 'Renvoie seulement les corrections complètes des copies à modifier. Les autres restent conservées. '
             action += ('Applique les mêmes décisions à toutes ces copies, y compris celles signalées à reprendre. '
                        'Réutilise les corrigés validés dans cette conversation ; demande-les s’ils manquent. '
                        'Si la réponse est trop longue, envoie plusieurs JSON avec cette enveloppe et des copies complètes, jamais une copie tronquée.\n')
