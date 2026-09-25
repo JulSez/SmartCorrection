@@ -73,7 +73,7 @@ function packetPanel(){
 }
 function referenceDocumentPanel(){
  const documents=(state.fichiers||[]).filter(f=>f.role==='corrige');
- return `<details class="card"><summary>Corrigé de référence (facultatif)</summary><p class="help">Ajoutez le PDF du corrigé et joignez-le aussi dans l’IA. Le corrigé LaTeX pourra être ajusté pendant le calibrage.</p>${documents.map(f=>`<p><a target="_blank" rel="noopener" href="/file?kind=source&id=${f.id}">${esc(f.nom)}</a></p>`).join('')}<input type="file" id="reference-file" accept="application/pdf,.pdf"><button id="upload-reference">Importer le corrigé PDF</button></details>`;
+ return `<details class="card"><summary>Corrigé de référence (facultatif)</summary><p class="help">Ajoutez le PDF du corrigé et joignez-le aussi dans l’IA. Le JSON du barème contient aussi le corrigé LaTeX. Il restera modifiable pendant le calibrage.</p>${documents.map(f=>`<p><a target="_blank" rel="noopener" href="/file?kind=source&id=${f.id}">${esc(f.nom)}</a></p>`).join('')}<input type="file" id="reference-file" accept="application/pdf,.pdf"><button id="upload-reference">Importer le corrigé PDF</button></details>`;
 }
 function bindReferenceDocument(){
  $('#upload-reference').onclick=()=>task(async()=>{
@@ -159,6 +159,7 @@ renderDossier=function(){
  else if(current===1)renderCalibrationFast();
  else if(current===2)renderFullCorrectionFast();
  else {renderFinalV2();$('#main').insertAdjacentHTML('beforeend',copyControls());bindCopyControls();}
+ if(current>=2&&state.pretraitement){$('#main').insertAdjacentHTML('beforeend',`<details><summary>Modifier ou retirer le nom d’une copie</summary>${assignmentPanel(state.pretraitement)}</details>`);bindAssignments();}
  $('#main').insertAdjacentHTML('beforeend',`<div class="footer-nav"><button id="previous" ${current===0?'disabled':''}>← Étape précédente</button>${current<3?'<button id="next">Étape suivante →</button>':'<button id="finish-home">Revenir à mes évaluations</button>'}</div>`);
  $('#previous').onclick=()=>goStep(current-1);if($('#next'))$('#next').onclick=()=>goStep(current+1);if($('#finish-home'))$('#finish-home').onclick=()=>loadHome();
  bindCommon();

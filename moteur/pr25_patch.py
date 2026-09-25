@@ -149,6 +149,9 @@ def _assign_student(self, ident, reference, eleve_id=None):
                                  WHERE u.dossier_id=? AND u.reference=?''', (ident, reference)).fetchone()
         if linked:
             conn.execute('UPDATE copie SET eleve_id=? WHERE id=?', (eleve_id, linked['id']))
+            conn.execute('UPDATE correction SET note_finale=NULL WHERE copie_id IN (SELECT id FROM copie WHERE sujet_id=?)', (dossier['sujet_id'],))
+            conn.execute('UPDATE ui_rendu SET valide=0 WHERE dossier_id=?', (ident,))
+            conn.execute('UPDATE ui_dossier SET termine=0 WHERE id=?', (ident,))
     return {'reference': reference, 'eleve_id': eleve_id}
 
 

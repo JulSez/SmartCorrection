@@ -90,6 +90,7 @@ class PromptWorkflowTests(unittest.TestCase):
 
     def test_first_and_revised_grid_require_every_reference_transactionally(self):
         grid = self.example('bareme')
+        grid.pop('corriges')  # Legacy rubric: references are still requested at calibration.
         grid['versions'].append({'version':'B'})
         grid['grilles'].append(dict(copy.deepcopy(grid['grilles'][0]), version='B', nom='B'))
         self.submit('bareme', grid)
@@ -156,6 +157,49 @@ class PromptWorkflowTests(unittest.TestCase):
         invalid['corrections'][0]['items'][0]['points_obtenus'] = 999
         with self.assertRaises(ValueError): self.submit('calibrage', invalid)
         self.assertEqual(self.app.state(self.ident)['copies'][0]['note_finale'],10)
+
+    def test_rubric_imports_all_references_atomically_before_calibration(self):
+        value = self.example('bareme')
+        bad = copy.deepcopy(value)
+        bad['corriges'][0]['version'] = 'INCONNUE'
+        with self.assertRaises(ValueError):
+            self.submit('bareme',bad)
+        self.assertEqual(self.app.state(self.ident)['dossier']['revision'],0)
+        self.submit('bareme',value)
+        self.assertEqual(self.app.state(self.ident)['versions'][0]['corrige_latex'],value['corriges'][0]['corrige_latex'])
+        self.assertNotIn('corriges',self.example('calibrage'))
+
+    def test_remove_name_after_correction_migrates_old_database_and_preserves_marks(self):
+        from moteur.db import database, init_db
+        self.start()
+        pupil = self.app.state(self.ident)['eleves'][0]['id']
+        self.app.assign_student(self.ident,'C001',pupil)
+        result = self.app.generate(self.ident,pdf=False)
+        before = self.app.state(self.ident)['copies'][0]
+        with database(self.app.db_path) as conn:
+            old = conn.execute("SELECT sql FROM sqlite_master WHERE name='freeze_copy_identity'").fetchone()[0]
+            old = old.replace(' AND NEW.eleve_id IS NOT NULL','')
+            conn.execute('DROP TRIGGER freeze_copy_identity')
+            conn.execute(old)
+            conn.execute('PRAGMA user_version=6')
+        init_db(self.app.db_path)
+        self.app.assign_student(self.ident,'C001',None)
+        state = self.app.state(self.ident)
+        after = state['copies'][0]
+        self.assertIsNone(after['eleve_id'])
+        self.assertEqual(after['correction_id'],before['correction_id'])
+        self.assertEqual(after['note_individuelle'],before['note_individuelle'])
+        self.assertFalse(next(r for r in state['rendus'] if r['id']==result['id'])['valide'])
+        self.assertIsNone(self.app.state(self.ident)['pretraitement']['copies'][0].get('eleve_id'))
+        self.app.sample(self.ident,['C001'],True)
+        regenerated = self.app.generate(self.ident,final=True,pdf=False)
+        notes = json.loads(self.app.file('rendu',regenerated['id'],'notes.json').read_text())
+        self.assertIsNone(notes['notes'][0]['numero'])
+        with database(self.app.db_path) as conn:
+            with self.assertRaises(__import__('sqlite3').IntegrityError):
+                conn.execute("UPDATE copie SET statut='absent' WHERE id=?",(after['copie_id'],))
+        self.app.assign_student(self.ident,'C001',pupil)
+        self.assertEqual(self.app.state(self.ident)['copies'][0]['correction_id'],before['correction_id'])
 
     @unittest.skipUnless(os.environ.get('SMARTCORRECTION_TEST_PDF')=='1', 'real PDF integration')
     def test_first_prompt_example_compiles_real_pdf(self):
