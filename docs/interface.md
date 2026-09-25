@@ -461,3 +461,13 @@ L’élève reste dans la classe et peut être réaffecté. Les PDF deviennent �
 notes de groupe sont recalculées à partir des affectations courantes. L’affectation est
 également accessible dans les écrans Correction complète et Résultats. Cette action
 retire le lien local à l’élève ; elle ne masque pas un nom manuscrit dans le PDF original.
+
+
+### Modifier une correction après le document final
+
+Dans **Résultats**, cliquez **Modifier une correction**. À l’étape Correction complète,
+choisissez la référence de la copie ; la consigne et son exemple JSON ne concernent que
+cette copie. Collez sa correction complète puis enregistrez. Les autres copies sont
+conservées et les anciens PDF sont marqués à régénérer. Passez ensuite aux résultats
+pour produire les documents à jour. Le formulaire reste accessible quand aucune copie
+ne reste à corriger.

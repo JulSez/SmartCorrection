@@ -129,17 +129,21 @@ function renderCalibrationFast(){
 }
 function renderFullCorrectionFast(){
  const remaining=state.copies.filter(c=>c.statut==='present'&&!c.exclue_final&&(!c.correction_id||c.a_revoir));
+ const editable=state.copies.filter(c=>c.statut==='present'&&c.correction_id);
  $('#main').innerHTML=fastHeader('3. Correction complète','L’IA applique maintenant le barème et toutes les décisions figées pendant le calibrage à toutes les copies restantes.')+
  `<div class="card"><strong>${remaining.length}</strong> copie(s) restante(s).</div>`+
- (remaining.length?fastExchange('correction','Importer les corrections'):'<div class="notice success">Toutes les copies incluses sont corrigées. Passez aux résultats.</div>')+copyControls();
+ `<div class="field"><label for="correction-target">Copies à corriger ou modifier</label><select id="correction-target">${remaining.length?'<option value="reste">Copies restantes</option>':''}${editable.map(c=>`<option value="copie:${esc(c.reference)}">${esc(c.reference)} — modifier la correction</option>`).join('')}</select></div>`+
+ ((remaining.length||editable.length)?fastExchange('correction','Enregistrer les corrections'):'<p>Aucune copie disponible.</p>')+copyControls();
  bindCopyControls();
- if(!remaining.length)return;
- bindFastPrompt('correction','reste');
+ if(!remaining.length&&!editable.length)return;
+ const mode=remaining.length?'reste':'copie:'+editable[0].reference;
+ bindFastPrompt('correction',mode);
+ $('#correction-target').onchange=()=>bindFastPrompt('correction',$('#correction-target').value);
  $('#fast-submit').onclick=()=>task(async()=>{try{
    await fastExchangeCommit('correction');state=await get('/api/dossier?id='+state.dossier.id);
    const left=state.copies.filter(c=>c.statut==='present'&&!c.exclue_final&&(!c.correction_id||c.a_revoir));
    if(left.length){renderDossier();toast(`${left.length} copie(s) restent à corriger ou à revoir. La consigne est actualisée.`);return;}
-   current=3;renderDossier();toast('Toutes les corrections sont importées.');
+   renderDossier();toast('Corrections enregistrées. Passez aux résultats pour régénérer le PDF.');
  }catch(e){$('#fast-error').innerHTML=`<div class="error">${esc(e.message)}</div>`;throw e;}});
 }
 function resumeStep(){
@@ -158,7 +162,7 @@ renderDossier=function(){
  if(current===0)renderBaremeFast();
  else if(current===1)renderCalibrationFast();
  else if(current===2)renderFullCorrectionFast();
- else {renderFinalV2();$('#main').insertAdjacentHTML('beforeend',copyControls());bindCopyControls();}
+ else {renderFinalV2();$('#main').insertAdjacentHTML('beforeend','<button id="edit-finished-correction">Modifier une correction</button>'+copyControls());bindCopyControls();$('#edit-finished-correction').onclick=()=>goStep(2);}
  if(current>=2&&state.pretraitement){$('#main').insertAdjacentHTML('beforeend',`<details><summary>Modifier ou retirer le nom d’une copie</summary>${assignmentPanel(state.pretraitement)}</details>`);bindAssignments();}
  $('#main').insertAdjacentHTML('beforeend',`<div class="footer-nav"><button id="previous" ${current===0?'disabled':''}>← Étape précédente</button>${current<3?'<button id="next">Étape suivante →</button>':'<button id="finish-home">Revenir à mes évaluations</button>'}</div>`);
  $('#previous').onclick=()=>goStep(current-1);if($('#next'))$('#next').onclick=()=>goStep(current+1);if($('#finish-home'))$('#finish-home').onclick=()=>loadHome();

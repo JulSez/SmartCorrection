@@ -201,6 +201,29 @@ class PromptWorkflowTests(unittest.TestCase):
         self.app.assign_student(self.ident,'C001',pupil)
         self.assertEqual(self.app.state(self.ident)['copies'][0]['correction_id'],before['correction_id'])
 
+    def test_update_selected_copy_after_final_preserves_other_copies(self):
+        self.start(two=True)
+        self.app.sample(self.ident,['C001'],True)
+        self.submit('correction',self.example('correction',mode='reste'))
+        final = self.app.generate(self.ident,final=True,pdf=False)
+        other = self.app.state(self.ident)['copies'][0]
+        value = self.example('correction',mode='copie:C002')
+        self.assertEqual([c['reference'] for c in value['corrections']],['C002'])
+        value['corrections'][0]['items'][0]['points_obtenus'] = 1
+        value['corrections'][0]['items'][0]['commentaire'] = 'Signe incorrect.'
+        self.submit('correction',value)
+        state = self.app.state(self.ident)
+        self.assertFalse(state['dossier']['termine'])
+        self.assertFalse(next(r for r in state['rendus'] if r['id']==final['id'])['valide'])
+        self.assertEqual(state['copies'][0]['correction_id'],other['correction_id'])
+        self.assertEqual(state['copies'][0]['note_finale'],other['note_finale'])
+        self.assertEqual(state['copies'][1]['note_finale'],10)
+        new = self.app.generate(self.ident,final=True,pdf=False)
+        notes = json.loads(self.app.file('rendu',new['id'],'notes.json').read_text())
+        self.assertEqual(len(notes['notes']),2)
+        with self.assertRaisesRegex(ValueError,'Aucune copie'):
+            self.example('correction',mode='copie:C999')
+
     @unittest.skipUnless(os.environ.get('SMARTCORRECTION_TEST_PDF')=='1', 'real PDF integration')
     def test_first_prompt_example_compiles_real_pdf(self):
         from pypdf import PdfReader
