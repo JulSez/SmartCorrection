@@ -73,8 +73,10 @@ def _draft(self, ident, stage, text):
 
 
 def _bareme(self, conn, dossier, data):
-    """Validate the final barème before preprocessing/corrigé exists."""
-    result = BaseApplication._grid(self, conn, dossier, data)
+    """Import the rubric and reference correction in one transaction."""
+    result = BaseApplication._grid(self, conn, dossier, {k:v for k,v in data.items() if k != 'corriges'})
+    if 'corriges' in data:
+        _save_corriges(conn, self._dossier(conn, dossier['id']), data['corriges'])
     return dict(result, bareme_valide=True)
 
 

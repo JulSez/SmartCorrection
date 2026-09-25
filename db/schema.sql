@@ -274,7 +274,7 @@ WHEN NEW.sujet_id IS NOT OLD.sujet_id AND (EXISTS(SELECT 1 FROM copie WHERE vers
 BEGIN SELECT RAISE(ABORT, 'Version utilisée'); END;
 CREATE TRIGGER IF NOT EXISTS freeze_copy_identity BEFORE UPDATE ON copie
 WHEN EXISTS(SELECT 1 FROM correction WHERE copie_id=OLD.id) AND
- (NEW.sujet_id IS NOT OLD.sujet_id OR NEW.version_id IS NOT OLD.version_id OR (OLD.eleve_id IS NOT NULL AND NEW.eleve_id IS NOT OLD.eleve_id) OR NEW.statut IS NOT OLD.statut)
+ (NEW.sujet_id IS NOT OLD.sujet_id OR NEW.version_id IS NOT OLD.version_id OR (OLD.eleve_id IS NOT NULL AND NEW.eleve_id IS NOT NULL AND NEW.eleve_id IS NOT OLD.eleve_id) OR NEW.statut IS NOT OLD.statut)
 BEGIN SELECT RAISE(ABORT, 'Identité de copie déjà corrigée'); END;
 CREATE TRIGGER IF NOT EXISTS freeze_membership_delete BEFORE DELETE ON eleve_classe
 WHEN EXISTS(SELECT 1 FROM copie c JOIN sujet s ON s.id=c.sujet_id WHERE c.eleve_id=OLD.eleve_id AND s.classe=OLD.classe)

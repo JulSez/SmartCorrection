@@ -32,7 +32,7 @@ class MigrationTests(unittest.TestCase):
         init_db(self.db);init_db(self.db)
         with database(self.db) as conn:
             self.assertEqual(conn.execute('PRAGMA foreign_key_check').fetchall(),[])
-            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],6)
+            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],7)
             self.assertEqual(conn.execute('SELECT points_obtenus FROM correction_item').fetchone()[0],12)
             self.assertEqual(conn.execute('SELECT texte FROM conseil').fetchone()[0],'Vérifier')
             self.assertEqual(conn.execute('SELECT grille_id FROM item').fetchone()[0],1)

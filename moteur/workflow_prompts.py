@@ -68,14 +68,15 @@ def make_prompt(app, ident, stage, version=None, mode='echantillon'):
         example = dict(envelope, versions=[{'version': 'A'}], grilles=[{'nom': 'Barème A', 'version': 'A',
             'exercices': [{'numero': '1', 'questions': [{'numero': '1', 'items': [
                 {'code': 'E1Q1I1', 'description': 'Résoudre', 'bareme_max': 2, 'regle_correction': 'Tolérance validée avec l’enseignant'}]}]}]}])
-        return context + ('\n\nACTION : discuter et valider le barème. Propose une grille lisible, compacte : '
+        example['corriges'] = [{'version':'A','corrige_latex':r'\begin{align*}2x&=4\\x&=2\end{align*}'}]
+        return context + ('\n\nACTION : discuter et valider le barème et son corrigé. Propose une grille lisible, compacte : '
             'vise 1 ou 2 items par question ; 3 seulement si trois attentes réellement distinctes doivent être notées séparément. '
             'Ne découpe pas artificiellement une même étape en méthode / calcul / rédaction. '
             'Respecte le niveau de rédaction des savoir-faire ; ne crée pas de pénalité non discutée. '
             'Ne rends PAS le JSON avant l’accord de l’enseignant.\n'
             'Après accord : toutes les versions et grilles ; codes uniques par grille et stables ; numéros d’exercice/question en chaînes ; '
             'bareme_max numérique >= 0 ; version:null possible pour une grille commune. Aucun champ validee. '
-            'Ne fournis encore ni inventaire des copies ni corrigés.') + _response(example)
+            'Fournis aussi corriges pour TOUTES les versions : version et corrige_latex (corps LaTeX sans préambule). Reprends le corrigé fourni ou rédige-le avec les savoir-faire, égalités et équivalences alignées. Pas encore d’inventaire des copies.') + _response(example)
     if stage in {'calibrage', 'correction'}:
         if not state['grille'] or not state['versions']:
             raise ValueError('Valider le barème avant de demander une correction')

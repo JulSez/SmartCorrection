@@ -445,3 +445,19 @@ avant remplacement. Pour un dossier typé, le JSON ajoute `type_epreuve`, `base_
 au couple classe/type ; `base_type` est la version donnée par la consigne. Les champs `base_type` et `type`
 sont facultatifs mais doivent être fournis ensemble, avec le `type_epreuve` donné par la consigne. Tous les remplacements d’un retour
 sont transactionnels. Le contrat technique JSON reste fixe et séparé de cette mémoire.
+
+
+### Corrigé dès le barème et retrait du nom après correction
+
+La réponse de l’IA à l’étape **Barème** contient désormais `versions`, `grilles` et
+`corriges` : pour chaque version, le corps complet `corrige_latex`. Le barème et le corrigé
+sont enregistrés ensemble ; une référence invalide annule tout l’import. Les anciens JSON
+sans `corriges` restent acceptés : le calibrage demande alors les références manquantes.
+Le corrigé peut toujours être remplacé dans le JSON de calibrage.
+
+**Retirer le nom**, dans l’affectation locale, fonctionne aussi pour une copie déjà corrigée.
+La copie devient non attribuée ; ses points, commentaires et conseils sont conservés.
+L’élève reste dans la classe et peut être réaffecté. Les PDF deviennent à régénérer et les
+notes de groupe sont recalculées à partir des affectations courantes. L’affectation est
+également accessible dans les écrans Correction complète et Résultats. Cette action
+retire le lien local à l’élève ; elle ne masque pas un nom manuscrit dans le PDF original.
