@@ -224,6 +224,31 @@ class PromptWorkflowTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'Aucune copie'):
             self.example('correction',mode='copie:C999')
 
+    def test_late_packet_import_preserves_corrections_and_migrates_pdf_lock(self):
+        import base64, io, sqlite3
+        from pypdf import PdfWriter
+        from moteur.db import database, init_db
+        self.start()
+        before = self.app.state(self.ident)['copies'][0]
+        old_render = self.app.generate(self.ident,pdf=False)
+        with database(self.app.db_path) as conn:
+            conn.execute('DROP TRIGGER freeze_copy_pdf')
+            conn.execute("""CREATE TRIGGER freeze_copy_pdf BEFORE UPDATE OF pdf_path ON copie
+                WHEN NEW.pdf_path IS NOT OLD.pdf_path AND EXISTS(SELECT 1 FROM correction WHERE copie_id=OLD.id)
+                BEGIN SELECT RAISE(ABORT, 'PDF de copie déjà corrigée'); END""")
+            conn.execute('PRAGMA user_version=7')
+        init_db(self.app.db_path)
+        stream = io.BytesIO(); writer = PdfWriter(); writer.add_blank_page(width=333,height=555); writer.write(stream);writer.close()
+        self.app.upload(self.ident,'paquet','copies.pdf',base64.b64encode(stream.getvalue()).decode())
+        state = self.app.state(self.ident)
+        self.assertEqual(state['copies'][0]['correction_id'],before['correction_id'])
+        self.assertEqual(state['copies'][0]['note_finale'],before['note_finale'])
+        self.assertTrue(state['copies'][0]['pdf_path'])
+        self.assertFalse(next(r for r in state['rendus'] if r['id']==old_render['id'])['valide'])
+        with database(self.app.db_path) as conn:
+            with self.assertRaisesRegex(sqlite3.IntegrityError,'PDF de copie'):
+                conn.execute("UPDATE copie SET pdf_path='autre.pdf' WHERE id=?",(before['copie_id'],))
+
     @unittest.skipUnless(os.environ.get('SMARTCORRECTION_TEST_PDF')=='1', 'real PDF integration')
     def test_first_prompt_example_compiles_real_pdf(self):
         from pypdf import PdfReader

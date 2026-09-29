@@ -471,3 +471,17 @@ cette copie. Collez sa correction complète puis enregistrez. Les autres copies 
 conservées et les anciens PDF sont marqués à régénérer. Passez ensuite aux résultats
 pour produire les documents à jour. Le formulaire reste accessible quand aucune copie
 ne reste à corriger.
+
+### Paquet PDF importé après le calibrage
+
+L’import du premier paquet est autorisé même si les copies ont déjà été corrigées.
+La migration SQLite v8 conserve les corrections et permet d’attacher le fichier quand
+le chemin source était vide ; remplacer un PDF déjà lié à une copie corrigée reste interdit.
+
+Dans **Calibrage**, le bloc **PDF des copies** affiche le paquet réellement enregistré.
+Importez-le ici si nécessaire, puis cliquez **Régénérer le rendu**, sans recoller le JSON.
+Le titre de l’aperçu indique **Copies et corrections intercalées** ou **Corrections seules**.
+Dans ce dernier cas, un avertissement explique que les originaux sont absents du rendu.
+Les liens historiques et l’ancien aperçu ouvrent aussi le PDF intercalé lorsqu’il existe.
+Un paquet présent mais une copie sans pages provoque une erreur explicite, au lieu d’un
+fichier prétendument intercalé ne contenant que la correction.

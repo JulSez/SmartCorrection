@@ -177,3 +177,15 @@ test('finished assessments keep a targeted correction editor accessible',()=>{
  h.run(`current=3;renderFinalV2=()=>{};bindCommon=()=>{};renderDossier();`);
  assert.match(h.node('#main').innerHTML,/Modifier une correction/);
 });
+
+
+test('calibration regenerates without importing JSON and identifies interleaved preview',async()=>{
+ const h=harness(),calls=[];h.context.record=x=>calls.push(JSON.parse(JSON.stringify(x)));
+ h.run(`state.calibrage={};state.fichiers=[{role:'paquet',nom:'copies.pdf',pages:1}];state.copies=[{reference:'C001',echantillon:1,statut:'present',correction_id:1}];state.rendus=[{id:1,pdf:true,valide:1,intercale:true}];bindFastPrompt=()=>{};bindAssignments=()=>{};bindCopyControls=()=>{};copyControls=()=>'';task=async f=>f();post=async data=>{record(data);return {};};get=async()=>state;renderDossier=()=>{};toast=()=>{};renderCalibrationFast();`);
+ assert.match(h.node('#main').innerHTML,/Copies et corrections intercalées/);
+ assert.match(h.node('#main').innerHTML,/copies-et-corrections.pdf/);
+ await h.node('#regenerate-calibration').onclick();
+ assert.deepEqual(calls,[{action:'generer',dossier:'demo',final:false,pdf:true}]);
+ h.run('state.rendus[0].intercale=false');
+ assert.match(h.run('latestCalibrationRender()'),/ne contient pas les copies originales/);
+});

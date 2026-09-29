@@ -399,6 +399,8 @@ class WorkflowApplication(LegacyApplication):
                         for row in result['notes']:
                             name = f"eleve_{row['numero']:03d}" if row['numero'] is not None else f"copie_{row['copie_id']:04d}"
                             pages = [] if row['statut']=='absent' else [p[0] for p in conn.execute('SELECT page FROM copie_page WHERE copie_id=? ORDER BY ordre', (row['copie_id'],))]
+                            if row['statut'] != 'absent' and not pages:
+                                raise ValueError(f"{labels[row['copie_id']]} : aucune page de copie enregistrée. Corriger le repérage avant de générer le document intercalé.")
                             entries.append((folder/(name+'.pdf'), pages))
                         interleave_packet(packet['chemin'], sorted(entries, key=lambda e:e[0].name), folder/'copies-et-corrections.pdf')
                     _refresh_manifest(folder, result['sujet']['id'], True)

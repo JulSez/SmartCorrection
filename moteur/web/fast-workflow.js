@@ -64,7 +64,7 @@ function latestCalibrationRender(){
  const renders=(state.rendus||[]).filter(r=>!r.final&&r.pdf&&Boolean(r.valide));
  if(!renders.length)return '';
  const r=renders[0],name=r.intercale?'copies-et-corrections.pdf':'corrections.pdf';
- return `<div class="card"><h2>Rendu du dernier lot</h2><object class="pdf-preview" type="application/pdf" data="/file?kind=rendu&id=${r.id}&name=${name}"></object><div class="actions"><a target="_blank" rel="noopener" href="/file?kind=rendu&id=${r.id}&name=${name}">Ouvrir le PDF ↗</a></div></div>`;
+ return `<div class="card"><h2>${r.intercale?'Copies et corrections intercalées':'Corrections seules'}</h2>${r.intercale?'':'<p class="notice warning">Ce rendu ne contient pas les copies originales. Vérifiez le PDF du paquet puis régénérez le rendu.</p>'}<object class="pdf-preview" type="application/pdf" data="/file?kind=rendu&id=${r.id}&name=${name}"></object><div class="actions"><a target="_blank" rel="noopener" href="/file?kind=rendu&id=${r.id}&name=${name}">Ouvrir le PDF ↗</a></div></div>`;
 }
 function packetPanel(){
  const packet=(state.fichiers||[]).find(f=>f.role==='paquet');
@@ -108,10 +108,14 @@ function renderCalibrationFast(){
  $('#main').innerHTML=fastHeader('2. Calibrage','Même écran à chaque lot : JSON → rendu → lot suivant, jusqu’à ce que la correction vous convienne.')+
  `<div class="card"><div class="row"><div><strong>Lot</strong><br>${esc(selected.join(', ')||'Premier lot : 5 premières copies')}</div><div><strong>Moyenne estimée</strong><br>${esc(mean)}</div><div><strong>Copies restant à calibrer/corriger</strong><br>${pending.length}</div></div></div>`+
  fastExchange('calibrage','Importer le JSON et afficher le rendu')+
- latestCalibrationRender()+
- `<div class="actions"><button id="next-batch">Lot suivant</button></div><div id="calibration-error"></div>`+
+ packetPanel()+latestCalibrationRender()+
+ `<div class="actions"><button id="regenerate-calibration">Régénérer le rendu</button><button id="next-batch">Lot suivant</button></div><div id="calibration-error"></div>`+
  (state.pretraitement?assignmentPanel(state.pretraitement):'')+copyControls();
- bindFastPrompt('calibrage');bindAssignments();bindCopyControls();
+ bindFastPrompt('calibrage');bindAssignments();bindCopyControls();if(!state.fichiers.some(f=>f.role==='paquet'))bindPacket();
+ $('#regenerate-calibration').onclick=()=>task(async()=>{try{
+   await post({action:'generer',dossier:state.dossier.id,final:false,pdf:true});
+   state=await get('/api/dossier?id='+state.dossier.id);renderDossier();toast('Rendu régénéré.');
+ }catch(e){$('#calibration-error').innerHTML=`<div class="error">${esc(e.message)}</div>`;throw e;}});
  $('#fast-submit').onclick=()=>task(async()=>{try{
    await fastExchangeCommit('calibrage');
    state=await get('/api/dossier?id='+state.dossier.id);

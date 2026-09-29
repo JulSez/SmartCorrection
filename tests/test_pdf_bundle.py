@@ -37,3 +37,19 @@ class InterleaveTests(unittest.TestCase):
         self.assertEqual(len(PdfReader(case.app.file('rendu',final['id'],'corrections.pdf')).pages),7)
         self.assertEqual(len(PdfReader(case.app.file('rendu',final['id'],'copies-et-corrections.pdf')).pages),13)
         self.assertTrue(case.app.state(case.ident)['rendus'][0]['intercale'])
+
+    @unittest.skipUnless(os.environ.get('SMARTCORRECTION_TEST_PDF')=='1', 'real PDF integration')
+    def test_late_packet_interleaves_after_calibration_without_reimporting_json(self):
+        import base64, io
+        from test_workflow_prompts import PromptWorkflowTests
+        case=PromptWorkflowTests();case.setUp();self.addCleanup(case.doCleanups)
+        case.start()
+        first=case.app.generate(case.ident,pdf=True)
+        self.assertNotIn('copies-et-corrections.pdf',first['fichiers'])
+        stream=io.BytesIO();writer=PdfWriter();writer.add_blank_page(width=333,height=555);writer.write(stream);writer.close()
+        case.app.upload(case.ident,'paquet','copies.pdf',base64.b64encode(stream.getvalue()).decode())
+        second=case.app.generate(case.ident,pdf=True)
+        pdf=PdfReader(case.app.file('rendu',second['id'],'copies-et-corrections.pdf'))
+        self.assertEqual(len(pdf.pages),2)
+        self.assertEqual(round(float(pdf.pages[0].mediabox.width)),333)
+        self.assertTrue(case.app.state(case.ident)['rendus'][0]['intercale'])
