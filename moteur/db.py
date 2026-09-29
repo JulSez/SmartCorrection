@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB = Path('db/smartcorrection.sqlite')
 SCHEMA = Path(__file__).with_name('schema.sql')
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 V3_SCHEMA = r'''
 CREATE TABLE IF NOT EXISTS copie_page (
@@ -59,7 +59,7 @@ CREATE TRIGGER IF NOT EXISTS freeze_copie_page_delete BEFORE DELETE ON copie_pag
 WHEN EXISTS(SELECT 1 FROM correction WHERE copie_id=OLD.copie_id)
 BEGIN SELECT RAISE(ABORT, 'Pages de copie déjà corrigée'); END;
 CREATE TRIGGER IF NOT EXISTS freeze_copy_pdf BEFORE UPDATE OF pdf_path ON copie
-WHEN NEW.pdf_path IS NOT OLD.pdf_path AND EXISTS(SELECT 1 FROM correction WHERE copie_id=OLD.id)
+WHEN NEW.pdf_path IS NOT OLD.pdf_path AND COALESCE(OLD.pdf_path,'')<>'' AND EXISTS(SELECT 1 FROM correction WHERE copie_id=OLD.id)
 BEGIN SELECT RAISE(ABORT, 'PDF de copie déjà corrigée'); END;
 '''
 
@@ -128,7 +128,7 @@ WHEN EXISTS(SELECT 1 FROM correction WHERE copie_id=OLD.id) AND
 BEGIN SELECT RAISE(ABORT, 'Identité de copie déjà corrigée'); END;
 
 CREATE TRIGGER freeze_copy_pdf BEFORE UPDATE OF pdf_path ON copie
-WHEN NEW.pdf_path IS NOT OLD.pdf_path AND EXISTS(SELECT 1 FROM correction WHERE copie_id=OLD.id)
+WHEN NEW.pdf_path IS NOT OLD.pdf_path AND COALESCE(OLD.pdf_path,'')<>'' AND EXISTS(SELECT 1 FROM correction WHERE copie_id=OLD.id)
 BEGIN SELECT RAISE(ABORT, 'PDF de copie déjà corrigée'); END;
 '''
 
@@ -189,6 +189,8 @@ ALTER TABLE item_new RENAME TO item;
 '''
         if version < 7:
             migration += '\nDROP TRIGGER IF EXISTS freeze_copy_identity;\n'
+        if version < 8:
+            migration += '\nDROP TRIGGER IF EXISTS freeze_copy_pdf;\n'
         conn.execute('PRAGMA foreign_keys = OFF')
         schema_path = Path(__file__).with_name('schema_legacy.sql') if version < 6 else SCHEMA
         base_schema = schema_path.read_text(encoding='utf-8') + '\n' + V3_SCHEMA
